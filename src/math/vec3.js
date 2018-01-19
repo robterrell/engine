@@ -5,22 +5,23 @@ pc.extend(pc, (function () {
     * @name pc.Vec3
     * @class A 3-dimensional vector.
     * @description Creates a new Vec3 object
-    * @param {Number} [x] The x value
+    * @param {Number} [x] The x value. If x is an array of length 3, the array will be used to populate all components.
     * @param {Number} [y] The y value
     * @param {Number} [z] The z value
     * @example
     * var v = new pc.Vec3(1,2,3);
     */
-    var Vec3 = function () {
+    var Vec3 = function(x, y, z) {
+        if (x && x.length === 3) {
+            this.data = new Float32Array(x);
+            return;
+        }
+
         this.data = new Float32Array(3);
 
-        if (arguments.length === 3) {
-            this.data.set(arguments);
-        } else {
-            this.data[0] = 0;
-            this.data[1] = 0;
-            this.data[2] = 0;
-        }
+        this.data[0] = x || 0;
+        this.data[1] = y || 0;
+        this.data[2] = z || 0;
     };
 
     Vec3.prototype = {
@@ -257,7 +258,7 @@ pc.extend(pc, (function () {
         /**
          * @function
          * @name pc.Vec3#mul
-         * @description Returns the result of multiplying the specified 3-dimensional vectors together.
+         * @description Multiplies a 3-dimensional vector to another in place.
          * @param {pc.Vec3} rhs The 3-dimensional vector used as the second multiplicand of the operation.
          * @returns {pc.Vec3} Self for chaining.
          * @example
@@ -313,6 +314,7 @@ pc.extend(pc, (function () {
          * @function
          * @name pc.Vec3#normalize
          * @description Returns the specified 3-dimensional vector copied and converted to a unit vector.
+         * If the vector has a length of zero, the vector's elements will be set to zero.
          * @returns {pc.Vec3} The result of the normalization.
          * @example
          * var v = new pc.Vec3(25, 0, 0);
@@ -323,7 +325,17 @@ pc.extend(pc, (function () {
          * console.log("The result of the vector normalization is: " + v.toString());
          */
         normalize: function () {
-            return this.scale(1 / this.length());
+            var v = this.data;
+
+            var lengthSq = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+            if (lengthSq > 0) {
+                var invLength = 1 / Math.sqrt(lengthSq);
+                v[0] *= invLength;
+                v[1] *= invLength;
+                v[2] *= invLength;
+            }
+
+            return this;
         },
 
         /**
@@ -358,7 +370,7 @@ pc.extend(pc, (function () {
          * @name pc.Vec3#scale
          * @description Scales each dimension of the specified 3-dimensional vector by the supplied
          * scalar value.
-         * @param {Number} scalar The value by which each vector dimension is multiplied.
+         * @param {Number} scalar The value by which each vector component is multiplied.
          * @returns {pc.Vec3} Self for chaining.
          * @example
          * var v = new pc.Vec3(2, 4, 8);
@@ -386,9 +398,9 @@ pc.extend(pc, (function () {
          * @function
          * @name pc.Vec3#set
          * @description Sets the specified 3-dimensional vector to the supplied numerical values.
-         * @param {Number} x The value to set on the first dimension of the vector.
-         * @param {Number} y The value to set on the second dimension of the vector.
-         * @param {Number} z The value to set on the third dimension of the vector.
+         * @param {Number} x The value to set on the first component of the vector.
+         * @param {Number} y The value to set on the second component of the vector.
+         * @param {Number} z The value to set on the third component of the vector.
          * @example
          * var v = new pc.Vec3();
          * v.set(5, 10, 20);
@@ -479,7 +491,7 @@ pc.extend(pc, (function () {
     /**
      * @name pc.Vec3#x
      * @type Number
-     * @description The first element of the vector.
+     * @description The first component of the vector.
      * @example
      * var vec = new pc.Vec3(10, 20, 30);
      *
@@ -501,7 +513,7 @@ pc.extend(pc, (function () {
     /**
      * @name pc.Vec3#y
      * @type Number
-     * @description The second element of the vector.
+     * @description The second component of the vector.
      * @example
      * var vec = new pc.Vec3(10, 20, 30);
      *
@@ -523,7 +535,7 @@ pc.extend(pc, (function () {
     /**
      * @name pc.Vec3#z
      * @type Number
-     * @description The third element of the vector.
+     * @description The third component of the vector.
      * @example
      * var vec = new pc.Vec3(10, 20, 30);
      *

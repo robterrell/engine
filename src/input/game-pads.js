@@ -2,12 +2,12 @@ pc.extend(pc, function () {
     /**
     * @name pc.GamePads
     * @class Input handler for accessing GamePad input
-    */ 
+    */
     var GamePads = function () {
         this.gamepadsSupported = !!navigator.getGamepads || !!navigator.webkitGetGamepads;
 
-        this.current = [];
-        this.previous = [];
+        this.current = [ ];
+        this.previous = [ ];
 
         this.deadZone = 0.25;
     };
@@ -20,7 +20,7 @@ pc.extend(pc, function () {
                 'PAD_FACE_2',
                 'PAD_FACE_3',
                 'PAD_FACE_4',
-               
+
                 // Shoulder buttons
                 'PAD_L_SHOULDER_1',
                 'PAD_R_SHOULDER_1',
@@ -103,13 +103,27 @@ pc.extend(pc, function () {
         * to work
         */
         update: function (dt) {
-            var pads = this.poll();
+            var i, j, l;
+            var buttons, buttonsLen;
 
-            var i, len = pads.length;
-            for (i = 0;i < len; i++) {
-                this.previous[i] = this.current[i];
+            // move current buttons status into previous array
+            for (i = 0, l = this.current.length; i < l; i++) {
+                buttons = this.current[i].pad.buttons
+                buttonsLen = buttons.length;
+                for (j = 0; j < buttonsLen; j++) {
+                    if (this.previous[i] === undefined) {
+                        this.previous[i] = [];
+                    }
+                    this.previous[i][j] = buttons[j].pressed;
+                }
+            }
+
+            // update current
+            var pads = this.poll();
+            for (i = 0, l = pads.length; i < l; i++) {
                 this.current[i] = pads[i];
-            }            
+            }
+
         },
 
         /**
@@ -181,7 +195,7 @@ pc.extend(pc, function () {
 
             var key = this.current[index].map.buttons[button];
             var i = pc[key];
-            return this.current[index].pad.buttons[i].pressed && !this.previous[index].pad.buttons[i].pressed;
+            return this.current[index].pad.buttons[i].pressed && !this.previous[index][i];
         },
 
         /**

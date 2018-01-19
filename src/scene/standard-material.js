@@ -6,7 +6,7 @@ pc.extend(pc, function () {
     /**
      * @name pc.StandardMaterial
      * @class A Standard material is the main, general purpose material that is most often used for rendering.
-     * It can approximate a wide variety of surface types and can simlulate dynamic reflected light.
+     * It can approximate a wide variety of surface types and can simulate dynamic reflected light.
      * @property {pc.Color} ambient The ambient color of the material. This color value is 3-component (RGB),
      * where each component is between 0 and 1.
      * @property {pc.Color} diffuse The diffuse color of the material. This color value is 3-component (RGB),
@@ -32,7 +32,7 @@ pc.extend(pc, function () {
      * This can be used as alternative to specular color to save space.
      * Metallic surfaces have their reflection tinted with diffuse color.
      * @property {pc.Texture} metalnessMap Monochrome metalness map.
-     * @property {Number} metalnessMapUv Metnalness map UV channel
+     * @property {Number} metalnessMapUv Metalness map UV channel
      * @property {String} metalnessMapChannel Color channel of the metalness map to use. Can be "r", "g", "b" or "a".
      * @property {Boolean} metalnessMapVertexColor Use vertex colors for metalness instead of a map
      * @property {pc.Vec2} metalnessMapTiling Controls the 2D tiling of the metalness map.
@@ -52,7 +52,7 @@ pc.extend(pc, function () {
      * @property {Number} refractionIndex Defines the index of refraction, i.e. the amount of distortion.
      * The value is calculated as (outerIor / surfaceIor), where inputs are measured indices of refraction, the one around the object and the one of it's own surface.
      * In most situations outer medium is air, so outerIor will be approximately 1. Then you only need to do (1.0 / surfaceIor).
-     * @property {pc.Vec3} emissive The emissive color of the material. This color value is 3-component (RGB),
+     * @property {pc.Color} emissive The emissive color of the material. This color value is 3-component (RGB),
      * where each component is between 0 and 1.
      * @property {pc.Texture} emissiveMap The emissive map of the material. This must be a 2D texture rather
      * than a cube map. If this property is set to a valid texture, the texture is used as the source for emissive
@@ -145,6 +145,7 @@ pc.extend(pc, function () {
      * @property {Boolean} useLighting Apply lighting
      * @property {Boolean} useSkybox Apply scene skybox as prefiltered environment map
      * @property {Boolean} useGammaTonemap Apply gamma correction and tonemapping (as configured in scene settings)
+     * @property {Boolean} twoSidedLighting Calculate proper normals (and therefore lighting) on backfaces
      *
      * @example
      * // Create a new Standard material
@@ -160,6 +161,10 @@ pc.extend(pc, function () {
      * @extends pc.Material
      * @author Will Eastcott and Arthur Rahteenko
      */
+
+    var lightBounds = new pc.BoundingBox();
+    var tempSphere = {center:null, radius:0};
+
     var StandardMaterial = function () {
         this.reset();
         this.update();
@@ -197,6 +202,23 @@ pc.extend(pc, function () {
         return new pc.Vec3(param.data[0], param.data[1], param.data[2]);
     };
 
+    var _createBoundingBox = function (param) {
+        var center, halfExtents;
+
+        if (param.data && param.data.center) {
+            center = new pc.Vec3(param.data.center[0], param.data.center[1], param.data.center[2]);
+        } else {
+            center = new pc.Vec3(0, 0, 0);
+        }
+
+        if (param.data && param.data.halfExtents) {
+            halfExtents = new pc.Vec3(param.data.halfExtents[0], param.data.halfExtents[1], param.data.halfExtents[2]);
+        } else {
+            halfExtents = new pc.Vec3(0.5, 0.5, 0.5);
+        }
+        return new pc.BoundingBox(center, halfExtents);
+    };
+
     var _createRgb = function (param) {
         return new pc.Color(param.data[0], param.data[1], param.data[2]);
     };
@@ -231,12 +253,13 @@ pc.extend(pc, function () {
             get: function() { return this[privMap]; },
             set: function (value) {
                 var oldVal = this[privMap];
-                if ((!oldVal && value) || (oldVal && !value)) this.dirtyShader = true;
+                if (!!oldVal ^ !!value) this.dirtyShader = true;
                 if (oldVal && value) {
                     if (oldVal.rgbm!==value.rgbm || oldVal.fixCubemapSeams!==value.fixCubemapSeams || oldVal.format!==value.format) {
                         this.dirtyShader = true;
                     }
                 }
+
                 this[privMap] = value;
             }
         });
@@ -244,10 +267,8 @@ pc.extend(pc, function () {
         var mapTiling = privMapTiling.substring(1);
         var mapOffset = privMapOffset.substring(1);
 
-
         Object.defineProperty(StandardMaterial.prototype, mapTiling, {
             get: function() {
-                this.dirtyShader = true;
                 return this[privMapTiling];
             },
             set: function (value) {
@@ -267,7 +288,6 @@ pc.extend(pc, function () {
 
         Object.defineProperty(StandardMaterial.prototype, mapOffset, {
             get: function() {
-                this.dirtyShader = true;
                 return this[privMapOffset];
             },
             set: function (value) {
@@ -288,14 +308,14 @@ pc.extend(pc, function () {
         Object.defineProperty(StandardMaterial.prototype, privMapUv.substring(1), {
             get: function() { return this[privMapUv]; },
             set: function (value) {
-                this.dirtyShader = true;
+                if (this[privMapUv] !== value) this.dirtyShader = true;
                 this[privMapUv] = value;
             }
         });
         Object.defineProperty(StandardMaterial.prototype, privMapChannel.substring(1), {
             get: function() { return this[privMapChannel]; },
             set: function (value) {
-                this.dirtyShader = true;
+                if (this[privMapChannel] !== value) this.dirtyShader = true;
                 this[privMapChannel] = value;
             }
         });
@@ -334,7 +354,7 @@ pc.extend(pc, function () {
                 var oldVal = this[priv];
                 var wasBw = (oldVal.data[0]===0 && oldVal.data[1]===0 && oldVal.data[2]===0) || (oldVal.data[0]===1 && oldVal.data[1]===1 && oldVal.data[2]===1);
                 var isBw = (value.data[0]===0 && value.data[1]===0 && value.data[2]===0) || (value.data[0]===1 && value.data[1]===1 && value.data[2]===1);
-                if (wasBw || isBw) this.dirtyShader = true;
+                if (wasBw ^ isBw) this.dirtyShader = true;
                 this.dirtyColor = true;
                 this[priv] = value;
             }
@@ -370,7 +390,7 @@ pc.extend(pc, function () {
                     var oldVal = this[pmult];
                     var wasBw = oldVal===0 || oldVal===1;
                     var isBw = value===0 || value===1;
-                    if (wasBw || isBw) this.dirtyShader = true;
+                    if (wasBw ^ isBw) this.dirtyShader = true;
                     this.dirtyColor = true;
                     this[pmult] = value;
                 }
@@ -405,7 +425,7 @@ pc.extend(pc, function () {
                 var oldVal = this[priv];
                 var wasBw = oldVal===0 || oldVal===1;
                 var isBw = value===0 || value===1;
-                if (wasBw || isBw) this.dirtyShader = true;
+                if (wasBw ^ isBw) this.dirtyShader = true;
                 this[priv] = value;
             }
         });
@@ -422,7 +442,7 @@ pc.extend(pc, function () {
             get: function() { return this[priv]; },
             set: function (value) {
                 var oldVal = this[priv];
-                if ((!oldVal && value) || (oldVal && !value)) this.dirtyShader = true;
+                if (!!oldVal ^ !!value) this.dirtyShader = true;
                 this[priv] = value;
             }
         });
@@ -451,7 +471,7 @@ pc.extend(pc, function () {
         Object.defineProperty(StandardMaterial.prototype, name, {
             get: function() { return this[priv]; },
             set: function (value) {
-                this.dirtyShader = true;
+                if (this[priv] !== value) this.dirtyShader = true;
                 this[priv] = value;
             }
         });
@@ -553,6 +573,8 @@ pc.extend(pc, function () {
                     this[param.name] = _createCubemap(param);
                 } else if (param.name === "bumpMapFactor") { // Unfortunately, names don't match for bumpiness
                     this.bumpiness = param.data;
+                } else if (param.type === 'boundingbox') {
+                    this[param.name] = _createBoundingBox(param);
                 } else {
                     this[param.name] = param.data;
                 }
@@ -569,13 +591,30 @@ pc.extend(pc, function () {
             return transform;
         },
 
-        _collectLights: function(lType, lights, lightsSorted, mask) {
-            for (var i = 0; i < lights.length; i++) {
-                if (lights[i].getEnabled()) {
-                    if (lights[i].mask & mask) {
-                        if (lights[i].getType()==lType) {
-                            lightsSorted.push(lights[i]);
+        _collectLights: function(lType, lights, lightsSorted, mask, staticLightList) {
+            var light;
+            var i;
+            for (i = 0; i < lights.length; i++) {
+                light = lights[i];
+                if (light._enabled) {
+                    if (light._mask & mask) {
+                        if (light._type===lType) {
+                            if (lType!==pc.LIGHTTYPE_DIRECTIONAL) {
+                                if (light.isStatic) {
+                                    continue;
+                                }
+                            }
+                            lightsSorted.push(light);
                         }
+                    }
+                }
+            }
+
+            if (staticLightList) {
+                for(i=0; i<staticLightList.length; i++) {
+                    light = staticLightList[i];
+                    if (light._type===lType) {
+                        lightsSorted.push(light);
                     }
                 }
             }
@@ -598,7 +637,6 @@ pc.extend(pc, function () {
             var mname = p + "Map";
             if (this[mname]) {
                 this._setParameter("texture_" + mname, this[mname]);
-
                 var tname = mname + "Transform";
                 this[tname] = this._updateMapTransform(
                     this[tname],
@@ -682,24 +720,43 @@ pc.extend(pc, function () {
             if (this.cubeMap) {
                 this._setParameter('texture_cubeMap', this.cubeMap);
             }
+
             if (this.prefilteredCubeMap128) {
                 this._setParameter('texture_prefilteredCubeMap128', this.prefilteredCubeMap128);
+            } else if (this._scene && this._scene._skyboxPrefiltered[0]) {
+                this._setParameter('texture_prefilteredCubeMap128', this._scene._skyboxPrefiltered[0]);
             }
+
             if (this.prefilteredCubeMap64) {
                 this._setParameter('texture_prefilteredCubeMap64', this.prefilteredCubeMap64);
+            } else if (this._scene && this._scene._skyboxPrefiltered[1]) {
+                this._setParameter('texture_prefilteredCubeMap64', this._scene._skyboxPrefiltered[1]);
             }
+
             if (this.prefilteredCubeMap32) {
                 this._setParameter('texture_prefilteredCubeMap32', this.prefilteredCubeMap32);
+            } else if (this._scene && this._scene._skyboxPrefiltered[2]) {
+                this._setParameter('texture_prefilteredCubeMap32', this._scene._skyboxPrefiltered[2]);
             }
+
             if (this.prefilteredCubeMap16) {
                 this._setParameter('texture_prefilteredCubeMap16', this.prefilteredCubeMap16);
+            } else if (this._scene && this._scene._skyboxPrefiltered[3]) {
+                this._setParameter('texture_prefilteredCubeMap16', this._scene._skyboxPrefiltered[3]);
             }
+
             if (this.prefilteredCubeMap8) {
                 this._setParameter('texture_prefilteredCubeMap8', this.prefilteredCubeMap8);
+            } else if (this._scene && this._scene._skyboxPrefiltered[4]) {
+                this._setParameter('texture_prefilteredCubeMap8', this._scene._skyboxPrefiltered[4]);
             }
+
             if (this.prefilteredCubeMap4) {
                 this._setParameter('texture_prefilteredCubeMap4', this.prefilteredCubeMap4);
+            } else if (this._scene && this._scene._skyboxPrefiltered[5]) {
+                this._setParameter('texture_prefilteredCubeMap4', this._scene._skyboxPrefiltered[5]);
             }
+
             if (this.sphereMap) {
                 this._setParameter('texture_sphereMap', this.sphereMap);
             }
@@ -719,16 +776,17 @@ pc.extend(pc, function () {
         },
 
         _processColor: function () {
+            var c, i;
             if (!this.dirtyColor) return;
             if (!this._scene && this.useGammaTonemap) return;
             var gammaCorrection = false;
             if (this.useGammaTonemap) gammaCorrection = this._scene.gammaCorrection;
 
             // Gamma correct colors
-            for (var i = 0; i < _propsColor.length; i++) {
+            for (i = 0; i < _propsColor.length; i++) {
                 var clr = this[ "_" + _propsColor[i] ];
                 var arr = this[ _propsColor[i] + "Uniform" ];
-                for (var c = 0; c < 3; c++ ) {
+                for (c = 0; c < 3; c++ ) {
                     if (gammaCorrection) {
                         arr[c] = Math.pow(clr.data[c], 2.2);
                     } else {
@@ -767,7 +825,7 @@ pc.extend(pc, function () {
             return newID + 1;
         },
 
-        updateShader: function (device, scene, objDefs, forceRegenShader) {
+        updateShader: function (device, scene, objDefs, staticLightList, pass) {
             var i, c;
             if (!this._scene) {
                 this._scene = scene;
@@ -782,12 +840,12 @@ pc.extend(pc, function () {
 
             var globalSky128, globalSky64, globalSky32, globalSky16, globalSky8, globalSky4;
             if (this.useSkybox) {
-                globalSky128 = scene.skyboxPrefiltered128;
-                globalSky64 = scene.skyboxPrefiltered64;
-                globalSky32 = scene.skyboxPrefiltered32;
-                globalSky16 = scene.skyboxPrefiltered16;
-                globalSky8 = scene.skyboxPrefiltered8;
-                globalSky4 = scene.skyboxPrefiltered4;
+                globalSky128 = scene._skyboxPrefiltered[0];
+                globalSky64 = scene._skyboxPrefiltered[1];
+                globalSky32 = scene._skyboxPrefiltered[2];
+                globalSky16 = scene._skyboxPrefiltered[3];
+                globalSky8 = scene._skyboxPrefiltered[4];
+                globalSky4 = scene._skyboxPrefiltered[5];
             }
 
             var prefilteredCubeMap128 = this.prefilteredCubeMap128 || globalSky128;
@@ -877,6 +935,7 @@ pc.extend(pc, function () {
                 emissiveTint:               emissiveTint,
                 opacityTint:                this.opacity!==1 && this.blendType!==pc.BLEND_NONE,
                 alphaTest:                  this.alphaTest > 0,
+                alphaToCoverage:            this.alphaToCoverage,
                 needsNormalFloat:           this.normalizeNormalMap,
 
                 sphereMap:                  !!this.sphereMap,
@@ -899,7 +958,6 @@ pc.extend(pc, function () {
                 shadingModel:               this.shadingModel,
                 fresnelModel:               this.fresnelModel,
                 packedNormal:               this.normalMap? (this.normalMap.format===pc.PIXELFORMAT_DXT5) : false,
-                shadowSampleType:           this.shadowSampleType,
                 forceFragmentPrecision:     this.forceFragmentPrecision,
                 fastTbn:                    this.fastTbn,
                 cubeMapProjection:          this.cubeMapProjection,
@@ -910,14 +968,22 @@ pc.extend(pc, function () {
                 blendType:                  this.blendType,
                 skyboxIntensity:            (prefilteredCubeMap128===globalSky128 && prefilteredCubeMap128) && (scene.skyboxIntensity!==1),
                 forceUv1:                   this.forceUv1,
-                useTexCubeLod:              useTexCubeLod
+                useTexCubeLod:              useTexCubeLod,
+                msdf:                       !!this.msdfMap,
+                twoSidedLighting:           this.twoSidedLighting
             };
+
+            if (pass === pc.SHADER_FORWARDHDR) {
+                if (options.gamma) options.gamma = pc.GAMMA_SRGBHDR;
+                options.toneMap = pc.TONEMAP_LINEAR;
+            }
 
             var hasUv0 = false;
             var hasUv1 = false;
             var hasVcolor = false;
             if (objDefs) {
                 options.noShadow = (objDefs & pc.SHADERDEF_NOSHADOW) !== 0;
+                options.screenSpace = (objDefs & pc.SHADERDEF_SCREENSPACE) !== 0;
                 options.skin = (objDefs & pc.SHADERDEF_SKIN) !== 0;
                 options.useInstancing = (objDefs & pc.SHADERDEF_INSTANCING) !== 0;
                 if ((objDefs & pc.SHADERDEF_LM) !== 0) {
@@ -926,8 +992,11 @@ pc.extend(pc, function () {
                     options.lightMapChannel = "rgb";
                     options.lightMapUv = 1;
                     options.lightMapTransform = 0;
-                    options.lightMapWithoutAmbient = true;
+                    options.lightMapWithoutAmbient = !this.lightMap;
                     options.useRgbm = true;
+                    if ((objDefs & pc.SHADERDEF_DIRLM) !== 0) {
+                        options.dirLightMap = true;
+                    }
                 }
                 hasUv0 = (objDefs & pc.SHADERDEF_UV0) !== 0;
                 hasUv1 = (objDefs & pc.SHADERDEF_UV1) !== 0;
@@ -935,7 +1004,7 @@ pc.extend(pc, function () {
             }
 
             for (var p in pc._matTex2D) {
-                if (p==="opacity" && this.blendType===pc.BLEND_NONE && this.alphaTest===0.0) continue;
+                if (p==="opacity" && this.blendType===pc.BLEND_NONE && this.alphaTest===0.0 && !this.alphaToCoverage) continue;
                 var cname;
                 var mname = p + "Map";
                 var vname = mname + "VertexColor";
@@ -968,15 +1037,18 @@ pc.extend(pc, function () {
 
             if (this.useLighting) {
                 var lightsSorted = [];
-                var mask = objDefs? (objDefs >> 8) : 1;
+                var mask = objDefs ? (objDefs >> 16) : 1;
                 this._collectLights(pc.LIGHTTYPE_DIRECTIONAL, lights, lightsSorted, mask);
-                this._collectLights(pc.LIGHTTYPE_POINT,       lights, lightsSorted, mask);
-                this._collectLights(pc.LIGHTTYPE_SPOT,        lights, lightsSorted, mask);
+                this._collectLights(pc.LIGHTTYPE_POINT,       lights, lightsSorted, mask, staticLightList);
+                this._collectLights(pc.LIGHTTYPE_SPOT,        lights, lightsSorted, mask, staticLightList);
                 options.lights = lightsSorted;
             } else {
                 options.lights = [];
             }
 
+            if (options.lights.length===0) {
+                options.noShadow = false;
+            }
 
             var library = device.getProgramLibrary();
             this.shader = library.getProgram('standard', options);
@@ -1061,7 +1133,6 @@ pc.extend(pc, function () {
         _defineFlag(obj, "shadingModel", pc.SPECULAR_BLINN);
         _defineFlag(obj, "fresnelModel", pc.FRESNEL_NONE);
         _defineFlag(obj, "cubeMapProjection", pc.CUBEPROJ_NONE);
-        _defineFlag(obj, "shadowSampleType", pc.SHADOWSAMPLE_PCF3X3);
         _defineFlag(obj, "customFragmentShader", null);
         _defineFlag(obj, "forceFragmentPrecision", null);
         _defineFlag(obj, "useFog", true);
@@ -1069,6 +1140,7 @@ pc.extend(pc, function () {
         _defineFlag(obj, "useGammaTonemap", true);
         _defineFlag(obj, "useSkybox", true);
         _defineFlag(obj, "forceUv1", false);
+        _defineFlag(obj, "twoSidedLighting", false);
 
         _defineTex2D(obj, "diffuse", 0, 3);
         _defineTex2D(obj, "specular", 0, 3);
@@ -1080,6 +1152,7 @@ pc.extend(pc, function () {
         _defineTex2D(obj, "height", 0, 1);
         _defineTex2D(obj, "ao", 0, 1);
         _defineTex2D(obj, "light", 1, 3);
+        _defineTex2D(obj, "msdf", 0, 3);
 
         _defineObject(obj, "cubeMap");
         _defineObject(obj, "sphereMap");

@@ -1,5 +1,12 @@
 pc.extend(pc, function () {
 
+    var _schema = [
+        'enabled',
+        'scripts',
+        'instances',
+        'runInTools'
+    ];
+
     var INITIALIZE = "initialize";
     var POST_INITIALIZE = "postInitialize";
     var UPDATE = "update";
@@ -9,20 +16,14 @@ pc.extend(pc, function () {
     var ON_ENABLE = 'onEnable';
     var ON_DISABLE = 'onDisable';
 
-    var ScriptLegacyComponentSystem = function ScriptLegacyComponentSystem(app, prefix) {
+    var ScriptLegacyComponentSystem = function ScriptLegacyComponentSystem(app) {
         this.id = 'script';
         this.description = "Allows the Entity to run JavaScript fragments to implement custom behavior.";
         app.systems.add(this.id, this);
 
         this.ComponentType = pc.ScriptLegacyComponent;
         this.DataType = pc.ScriptLegacyComponentData;
-        this._prefix = prefix || null;
-        this.schema = [
-            'enabled',
-            'scripts',
-            'instances',
-            'runInTools'
-        ];
+        this.schema = _schema;
 
         // used by application during preloading phase to ensure scripts aren't
         // initialized until everything is loaded
@@ -43,6 +44,8 @@ pc.extend(pc, function () {
         pc.ComponentSystem.on(TOOLS_UPDATE, this.onToolsUpdate, this);
     };
     ScriptLegacyComponentSystem = pc.inherits(ScriptLegacyComponentSystem, pc.ComponentSystem);
+
+    pc.Component._buildAccessors(pc.ScriptLegacyComponent.prototype, _schema);
 
     pc.extend(ScriptLegacyComponentSystem.prototype, {
         initializeComponentData: function (component, data, properties) {
@@ -390,7 +393,7 @@ pc.extend(pc, function () {
             var self = this;
 
             // create copy of attribute data
-            // to avoid overwritting the same attribute values
+            // to avoid overwriting the same attribute values
             // that are used by the Editor
             attribute = {
                 name: attribute.name,

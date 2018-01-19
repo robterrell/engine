@@ -3,6 +3,7 @@ pc.programlib.pick = {
         var key = "pick";
         if (options.skin) key += "_skin";
         if (options.opacityMap) key += "_opam" + options.opacityChannel;
+        if (options.screenSpace) key += "_screenspace";
         return key;
     },
 
@@ -33,6 +34,8 @@ pc.programlib.pick = {
         if (options.skin) {
             code += pc.programlib.skinCode(device);
             code += chunks.transformSkinnedVS;
+        } else if (options.screenSpace) {
+            code += chunks.transformScreenSpaceVS;
         } else {
             code += chunks.transformVS;
         }
@@ -59,7 +62,7 @@ pc.programlib.pick = {
         //////////////////////////////
         code = pc.programlib.precisionCode(device);
 
-        code += "uniform vec4 uColor;"
+        code += "uniform vec4 uColor;";
 
         if (options.opacityMap) {
             code += 'varying vec2 vUv0;\n\n';
@@ -71,7 +74,7 @@ pc.programlib.pick = {
         code += pc.programlib.begin();
 
         if (options.opacityMap) {
-            code += '    alphaTest( texture2D(texture_opacityMap, vUv0).' + options.opacityChannel + ' );\n\n';
+            code += '    alphaTest( texture2D(texture_opacityMap, vUv0).' + options.opacityChannel[0] + ' );\n\n';
         }
         code += '    gl_FragColor = uColor;\n';
 

@@ -1,4 +1,15 @@
 pc.extend(pc, function () {
+    var _schema = [
+        'enabled',
+        'type',
+        'halfExtents',
+        'radius',
+        'axis',
+        'height',
+        'asset',
+        'shape',
+        'model'
+    ];
 
     /**
      * @name pc.CollisionComponentSystem
@@ -7,7 +18,7 @@ pc.extend(pc, function () {
      * @param {pc.Application} app The running {pc.Application}
      * @extends pc.ComponentSystem
      */
-     var CollisionComponentSystem = function CollisionComponentSystem (app) {
+    var CollisionComponentSystem = function CollisionComponentSystem (app) {
         this.id = "collision";
         this.description = "Specifies a collision volume.";
         app.systems.add(this.id, this);
@@ -15,17 +26,7 @@ pc.extend(pc, function () {
         this.ComponentType = pc.CollisionComponent;
         this.DataType = pc.CollisionComponentData;
 
-        this.schema = [
-            'enabled',
-            'type',
-            'halfExtents',
-            'radius',
-            'axis',
-            'height',
-            'asset',
-            'shape',
-            'model'
-        ];
+        this.schema = _schema;
 
         this.implementations = { };
 
@@ -35,6 +36,8 @@ pc.extend(pc, function () {
     };
 
     CollisionComponentSystem = pc.inherits(CollisionComponentSystem, pc.ComponentSystem);
+
+    pc.Component._buildAccessors(pc.CollisionComponent.prototype, _schema);
 
     CollisionComponentSystem.prototype = pc.extend(CollisionComponentSystem.prototype, {
         onLibraryLoaded: function () {
@@ -48,6 +51,7 @@ pc.extend(pc, function () {
 
         initializeComponentData: function (component, _data, properties) {
             // duplicate the input data because we are modifying it
+            var idx;
             var data = {};
             properties = ['type', 'halfExtents', 'radius', 'axis', 'height', 'shape', 'model', 'asset', 'enabled'];
             properties.forEach(function (prop) {
@@ -58,12 +62,12 @@ pc.extend(pc, function () {
             // but they are both trying to change the mesh
             // so remove one of them to avoid conflicts
             if (_data.hasOwnProperty('asset')) {
-                var idx = properties.indexOf('model');
+                idx = properties.indexOf('model');
                 if (idx !== -1) {
                     properties.splice(idx, 1);
                 }
             } else if (_data.hasOwnProperty('model')) {
-                var idx = properties.indexOf('asset');
+                idx = properties.indexOf('asset');
                 if (idx !== -1) {
                     properties.splice(idx, 1);
                 }
@@ -309,7 +313,7 @@ pc.extend(pc, function () {
         createPhysicalShape: function (entity, data) {
             if (typeof Ammo !== 'undefined') {
                 var he = data.halfExtents;
-                var ammoHe = new Ammo.btVector3(he.x, he.y, he.z);
+                var ammoHe = new Ammo.btVector3(he ? he.x : 0.5, he ? he.y : 0.5, he ? he.z : 0.5);
                 return new Ammo.btBoxShape(ammoHe);
             } else {
                 return undefined;
@@ -535,7 +539,7 @@ pc.extend(pc, function () {
 
             if (data.model) {
                 if (data.shape) {
-                   Ammo.destroy(data.shape);
+                    Ammo.destroy(data.shape);
                 }
 
                 data.shape = this.createPhysicalShape(entity, data);

@@ -10,6 +10,7 @@ pc.extend(pc, function () {
         this.clearColor = new pc.Color(0.722, 0.722, 0.722, 1);
         this.clearColorBuffer = true;
         this.clearDepthBuffer = true;
+        this.clearStencilBuffer = true;
         this.nearClip = 0.1;
         this.farClip = 1000;
         this.fov = 45;
@@ -17,8 +18,11 @@ pc.extend(pc, function () {
         this.projection = pc.PROJECTION_PERSPECTIVE;
         this.priority = 0;
         this.rect = new pc.Vec4(0,0,1,1);
+        this.scissorRect = new pc.Vec4(0,0,1,1);
         this.enabled = true;
         this.frustumCulling = false;
+        this.cullFaces = true;
+        this.flipFaces = false;
 
         // not serialized
         this.camera = null;
@@ -26,6 +30,8 @@ pc.extend(pc, function () {
         this.renderTarget = null;
         this.postEffects = null;
         this.isRendering = false;
+        this.calculateTransform = null;
+        this.calculateProjection = null;
     };
     CameraComponentData = pc.inherits(CameraComponentData, pc.ComponentData);
 

@@ -1,26 +1,26 @@
 pc.extend(pc, function () {
     /**
-     * @name pc.Application
-     * @class Default application which performs general setup code and initiates the main game loop.
-     * @description Create a new Application.
-     * @param {Element} canvas The canvas element
-     * @param {Object} options
-     * @param {pc.Keyboard} [options.keyboard] Keyboard handler for input
-     * @param {pc.Mouse} [options.mouse] Mouse handler for input
-     * @param {pc.TouchDevice} [options.touch] TouchDevice handler for input
-     * @param {pc.GamePads} [options.gamepads] Gamepad handler for input
-     * @param {String} [options.scriptPrefix] Prefix to apply to script urls before loading
-     * @param {String} [options.assetPrefix] Prefix to apply to asset urls before loading
-     * @param {Object} [options.graphicsDeviceOptions] Options object that is passed into the {@link pc.GraphicsDevice} constructor
-     *
-     * @example
-     * // Create application
-     * var app = new pc.Application(canvas, options);
-     * // Start game loop
-     * app.start()
-     */
+    * @name pc.Application
+    * @class Default application which performs general setup code and initiates the main game loop.
+    * @description Create a new Application.
+    * @param {Element} canvas The canvas element
+    * @param {Object} options
+    * @param {pc.Keyboard} [options.keyboard] Keyboard handler for input
+    * @param {pc.Mouse} [options.mouse] Mouse handler for input
+    * @param {pc.TouchDevice} [options.touch] TouchDevice handler for input
+    * @param {pc.GamePads} [options.gamepads] Gamepad handler for input
+    * @param {String} [options.scriptPrefix] Prefix to apply to script urls before loading
+    * @param {String} [options.assetPrefix] Prefix to apply to asset urls before loading
+    * @param {Object} [options.graphicsDeviceOptions] Options object that is passed into the {@link pc.GraphicsDevice} constructor
+    *
+    * @example
+    * // Create application
+    * var app = new pc.Application(canvas, options);
+    * // Start game loop
+    * app.start()
+    */
 
-     // PROPERTIES
+    // PROPERTIES
 
     /**
     * @name pc.Application#scene
@@ -34,66 +34,94 @@ pc.extend(pc, function () {
     * @description Scales the global time delta.
     */
 
+    /**
+    * @name pc.Application#assets
+    * @type {pc.AssetRegistry}
+    * @description The assets available to the application.
+    */
 
-     /**
-	 * @name pc.Application#assets
-	 * @type {pc.AssetRegistry}
-	 * @description The assets available to the application.
-	 */
+    /**
+    * @name pc.Application#graphicsDevice
+    * @type {pc.GraphicsDevice}
+    * @description The graphics device used by the application.
+    */
 
-     /**
-	 * @name pc.Application#graphicsDevice
-	 * @type {pc.GraphicsDevice}
-	 * @description The graphics device used by the application.
-	 */
+    /**
+    * @name pc.Application#systems
+    * @type {pc.ComponentSystemRegistry}
+    * @description The component systems.
+    */
 
-     /**
-	 * @name pc.Application#systems
-	 * @type {pc.ComponentSystem[]}
-	 * @description The component systems.
-	 */
+    /**
+    * @name pc.Application#loader
+    * @type {pc.ResourceLoader}
+    * @description The resource loader.
+    */
 
-     /**
-	 * @name pc.Application#loader
-	 * @type {pc.ResourceLoader}
-	 * @description The resource loader.
-	 */
+    /**
+    * @name pc.Application#root
+    * @type {pc.Entity}
+    * @description The root {@link pc.Entity} of the application.
+    */
 
-     /**
-	 * @name pc.Application#root
-	 * @type {pc.Entity}
-	 * @description The root {@link pc.Entity} of the application.
-	 */
+    /**
+    * @name pc.Application#keyboard
+    * @type {pc.Keyboard}
+    * @description The keyboard device.
+    */
 
-     /**
-	 * @name pc.Application#keyboard
-	 * @type {pc.Keyboard}
-	 * @description The keyboard device.
-	 */
+    /**
+    * @name pc.Application#mouse
+    * @type {pc.Mouse}
+    * @description The mouse device.
+    */
 
-     /**
-	 * @name pc.Application#mouse
-	 * @type {pc.Mouse}
-	 * @description The mouse device.
-	 */
+    /**
+    * @name pc.Application#touch
+    * @type {pc.TouchDevice}
+    * @description Used to get touch events input.
+    */
 
-     /**
-	 * @name pc.Application#touch
-	 * @type {pc.TouchDevice}
-	 * @description Used to get touch events input.
-	 */
+    /**
+    * @name pc.Application#gamepads
+    * @type {pc.GamePads}
+    * @description Used to access GamePad input.
+    */
 
-     /**
-	 * @name pc.Application#gamepads
-	 * @type {pc.GamePads}
-	 * @description Used to access GamePad input.
-	 */
+    /**
+    * @name pc.Application#elementInput
+    * @type {pc.ElementInput}
+    * @description Used to handle input for {@link pc.ElementComponent}s.
+    */
 
-     /**
-     * @name pc.Application#scripts
-     * @type pc.ScriptRegistry
-     * @description The Script Registry of the Application
-     */
+    /**
+    * @name pc.Application#scripts
+    * @type pc.ScriptRegistry
+    * @description The Script Registry of the Application
+    */
+
+    /**
+    * @name pc.Application#batcher
+    * @type pc.BatchManager
+    * @description The Batch Manager of the Application
+    */
+
+    /**
+    * @name pc.Application#autoRender
+    * @type Boolean
+    * @description When true (the default) the application's render function is called every frame.
+    */
+
+    /**
+    * @name pc.Application#renderNextFrame
+    * @type Boolean
+    * @description If {@link pc.Application#autoRender} is false, set `app.renderNextFrame` true to force application to render the scene once next frame.
+    * @example
+    * // render the scene only while space key is pressed
+    * if (this.app.keyboard.isPressed(pc.KEY_SPACE)) {
+    *    this.app.renderNextFrame = true;
+    * }
+    */
 
     var Application = function (canvas, options) {
         options = options || {};
@@ -110,9 +138,14 @@ pc.extend(pc, function () {
         this._time = 0;
         this.timeScale = 1;
 
+
+        this.autoRender = true;
+        this.renderNextFrame = false;
+
         this._librariesLoaded = false;
         this._fillMode = pc.FILLMODE_KEEP_ASPECT;
         this._resolutionMode = pc.RESOLUTION_FIXED;
+        this._allowResize = true;
 
         // for compatibility
         this.context = this;
@@ -120,7 +153,7 @@ pc.extend(pc, function () {
         this.graphicsDevice = new pc.GraphicsDevice(canvas, options.graphicsDeviceOptions);
         this.stats = new pc.ApplicationStats(this.graphicsDevice);
         this.systems = new pc.ComponentSystemRegistry();
-        this._audioManager = new pc.SoundManager();
+        this._audioManager = new pc.SoundManager(options);
         this.loader = new pc.ResourceLoader();
 
         this.scene = new pc.Scene();
@@ -135,11 +168,22 @@ pc.extend(pc, function () {
         this.renderer = new pc.ForwardRenderer(this.graphicsDevice);
         this.lightmapper = new pc.Lightmapper(this.graphicsDevice, this.root, this.scene, this.renderer, this.assets);
         this.once('prerender', this._firstBake, this);
+        this.batcher = new pc.BatchManager(this.graphicsDevice, this.root, this.scene);
+        this.once('prerender', this._firstBatch, this);
 
         this.keyboard = options.keyboard || null;
         this.mouse = options.mouse || null;
         this.touch = options.touch || null;
         this.gamepads = options.gamepads || null;
+        this.elementInput = options.elementInput || null;
+        if (this.elementInput)
+            this.elementInput.app = this;
+
+        this.vr = null;
+        // you can enable vr here, or in application properties
+        if (options.vr) {
+            this._onVrChange(options.vr);
+        }
 
         this._inTools = false;
 
@@ -149,7 +193,7 @@ pc.extend(pc, function () {
 
         this.loader.addHandler("animation", new pc.AnimationHandler());
         this.loader.addHandler("model", new pc.ModelHandler(this.graphicsDevice));
-        this.loader.addHandler("material", new pc.MaterialHandler(this.assets));
+        this.loader.addHandler("material", new pc.MaterialHandler(this));
         this.loader.addHandler("texture", new pc.TextureHandler(this.graphicsDevice, this.assets, this.loader));
         this.loader.addHandler("text", new pc.TextHandler());
         this.loader.addHandler("json", new pc.JsonHandler());
@@ -173,7 +217,7 @@ pc.extend(pc, function () {
         var camerasys = new pc.CameraComponentSystem(this);
         var lightsys = new pc.LightComponentSystem(this);
         if (pc.script.legacy) {
-            new pc.ScriptLegacyComponentSystem(this, options.scriptPrefix);
+            new pc.ScriptLegacyComponentSystem(this);
         } else {
             new pc.ScriptComponentSystem(this);
         }
@@ -181,7 +225,11 @@ pc.extend(pc, function () {
         var soundsys = new pc.SoundComponentSystem(this, this._audioManager);
         var audiolistenersys = new pc.AudioListenerComponentSystem(this, this._audioManager);
         var particlesystemsys = new pc.ParticleSystemComponentSystem(this);
-        var textsys = new pc.TextComponentSystem(this);
+        var screensys = new pc.ScreenComponentSystem(this);
+        var elementsys = new pc.ElementComponentSystem(this);
+        // var textsys = new pc.TextComponentSystem(this);
+        // var imagesys = new pc.ImageComponentSystem(this);
+        var zonesys = new pc.ZoneComponentSystem(this);
 
         this._visibilityChangeHandler = this.onVisibilityChange.bind(this);
 
@@ -214,7 +262,6 @@ pc.extend(pc, function () {
         } else {
             return Application._currentApplication;
         }
-
     };
 
 
@@ -248,12 +295,13 @@ pc.extend(pc, function () {
                     return;
                 }
 
-                var props = response['application_properties'];
-                var assets = response['assets'];
-                var scripts = response['scripts'];
-                var priorityScripts = response['priority_scripts'];
+                var props = response.application_properties;
+                var assets = response.assets;
+                var scripts = response.scripts;
+                var priorityScripts = response.priority_scripts;
 
                 self._parseApplicationProperties(props, function (err) {
+                    self._onVrChange(props.vr);
                     self._parseAssets(assets);
                     if (!err) {
                         callback(null);
@@ -322,31 +370,8 @@ pc.extend(pc, function () {
                         done();
                 };
 
-                if (! pc.script.legacy) {
-                    // build preloading scripts index
-                    var preloadScriptsIndex = { };
-                    for (i = 0; i < this.scriptsOrder.length; i++)
-                        preloadScriptsIndex[this.scriptsOrder[i]] = i;
-
-                    // sort preloading assets
-                    assets.sort(function(a, b) {
-                        if (a.type === 'script' && b.type === 'script') {
-                            var aInd = preloadScriptsIndex.hasOwnProperty(a.id) ? preloadScriptsIndex[a.id] : Number.MAX_SAFE_INTEGER;
-                            var bInd = preloadScriptsIndex.hasOwnProperty(b.id) ? preloadScriptsIndex[b.id] : Number.MAX_SAFE_INTEGER;
-                            // sort scripts based on preloading order
-                            return aInd - bInd;
-                        } else if ((a.type === 'script' || b.type === 'script') && a.type !== b.type) {
-                            // preload scripts first
-                            return a.type === 'script' ? -1 : 1;
-                        } else {
-                            // no sorting
-                            return 0;
-                        }
-                    });
-                }
-
                 // for each asset
-                for (i = 0; i < _assets.length; i++) {
+                for (i = 0; i < assets.length; i++) {
                     if (!assets[i].loaded) {
                         assets[i].once('load', onAssetLoad);
                         assets[i].once('error', onAssetError);
@@ -390,8 +415,16 @@ pc.extend(pc, function () {
             // Split loading into load and open
             var handler = this.loader.getHandler("hierarchy");
 
+            // include asset prefix if present
+            if (this.assets && this.assets.prefix && !pc.ABSOLUTE_URL.test(url)) {
+                url = pc.path.join(this.assets.prefix, url);
+            }
+
             handler.load(url, function (err, data) {
-                var settings = data.settings;
+                if (err) {
+                    if (callback) callback(err);
+                    return;
+                }
 
                 // called after scripts are preloaded
                 var _loaded = function () {
@@ -407,14 +440,12 @@ pc.extend(pc, function () {
                     pc.ComponentSystem.initialize(entity);
                     pc.ComponentSystem.postInitialize(entity);
 
-                    if (callback) {
-                        callback(err, entity);
-                    }
+                    if (callback) callback(err, entity);
                 };
 
                 // load priority and referenced scripts before opening scene
-                this._preloadScripts(data, _loaded);
-            }.bind(this));
+                self._preloadScripts(data, _loaded);
+            });
         },
 
         /**
@@ -434,6 +465,11 @@ pc.extend(pc, function () {
         * });
         */
         loadSceneSettings: function (url, callback) {
+            // include asset prefix if present
+            if (this.assets && this.assets.prefix && !pc.ABSOLUTE_URL.test(url)) {
+                url = pc.path.join(this.assets.prefix, url);
+            }
+
             this.loader.load(url, "scenesettings", function (err, settings) {
                 if (!err) {
                     this.applySceneSettings(settings);
@@ -453,6 +489,11 @@ pc.extend(pc, function () {
             var self = this;
 
             var handler = this.loader.getHandler("scene");
+
+            // include asset prefix if present
+            if (this.assets && this.assets.prefix && !pc.ABSOLUTE_URL.test(url)) {
+                url = pc.path.join(this.assets.prefix, url);
+            }
 
             handler.load(url, function (err, data) {
                 if (!err) {
@@ -523,8 +564,8 @@ pc.extend(pc, function () {
                 for (i = 0; i < l; i++) {
                     scriptUrl = scripts[i];
                     // support absolute URLs (for now)
-                    if (!regex.test(scriptUrl.toLowerCase()) && self.systems.script._prefix)
-                        scriptUrl = pc.path.join(self.systems.script._prefix, scripts[i]);
+                    if (!regex.test(scriptUrl.toLowerCase()) && self._scriptPrefix)
+                        scriptUrl = pc.path.join(self._scriptPrefix, scripts[i]);
 
                     this.loader.load(scriptUrl, 'script', onLoad);
                 }
@@ -536,14 +577,41 @@ pc.extend(pc, function () {
 
         // set application properties from data file
         _parseApplicationProperties: function (props, callback) {
+            // TODO: remove this temporary block after migrating properties
+            if (! props.useDevicePixelRatio)
+                props.useDevicePixelRatio = props.use_device_pixel_ratio;
+            if (! props.resolutionMode)
+                props.resolutionMode = props.resolution_mode;
+            if (! props.fillMode)
+                props.fillMode = props.fill_mode;
+            if (! props.vrPolyfillUrl)
+                props.vrPolyfillUrl = props.vr_polyfill_url;
+
             this._width = props.width;
             this._height = props.height;
-            if (props.use_device_pixel_ratio) {
+            if (props.useDevicePixelRatio) {
                 this.graphicsDevice.maxPixelRatio = window.devicePixelRatio;
             }
 
-            this.setCanvasResolution(props.resolution_mode, this._width, this._height);
-            this.setCanvasFillMode(props.fill_mode, this._width, this._height);
+            this.setCanvasResolution(props.resolutionMode, this._width, this._height);
+            this.setCanvasFillMode(props.fillMode, this._width, this._height);
+
+            // if VR is enabled in the project and there is no native VR support
+            // load the polyfill
+            if (props.vr && props.vrPolyfillUrl) {
+                if (!pc.VrManager.isSupported || pc.platform.android) {
+                    props.libraries.push(props.vrPolyfillUrl);
+                }
+            }
+
+            // add batch groups
+            if (props.batchGroups) {
+                for (var i = 0, len = props.batchGroups.length; i < len; i++) {
+                    var grp = props.batchGroups[i];
+                    this.batcher.addGroup(grp.name, grp.dynamic, grp.maxAabbSize, grp.id);
+                }
+
+            }
 
             this._loadLibraries(props.libraries, callback);
         },
@@ -552,6 +620,8 @@ pc.extend(pc, function () {
             var len = urls.length;
             var count = len;
             var self = this;
+
+            var regex = /^http(s)?:\/\//;
 
             if (len) {
                 var onLoad = function(err, script) {
@@ -566,6 +636,10 @@ pc.extend(pc, function () {
 
                 for (var i = 0; i < len; ++i) {
                     var url = urls[i];
+
+                    if (!regex.test(url.toLowerCase()) && self._scriptPrefix)
+                        url = pc.path.join(self._scriptPrefix, url);
+
                     this.loader.load(url, 'script', onLoad);
                 }
             } else {
@@ -575,10 +649,39 @@ pc.extend(pc, function () {
 
         // insert assets into registry
         _parseAssets: function (assets) {
-            for (var id in assets) {
-                var data = assets[id];
+            var i, id;
+            var scripts = [ ];
+            var list = [ ];
+
+            var scriptsIndex = { };
+
+            if (! pc.script.legacy) {
+                // add scripts in order of loading first
+                for (i = 0; i < this.scriptsOrder.length; i++) {
+                    id = this.scriptsOrder[i];
+                    if (! assets[id])
+                        continue;
+
+                    scriptsIndex[id] = true;
+                    list.push(assets[id]);
+                }
+
+                // then add rest of assets
+                for (id in assets) {
+                    if (scriptsIndex[id])
+                        continue;
+
+                    list.push(assets[id]);
+                }
+            } else {
+                for (id in assets)
+                    list.push(assets[id]);
+            }
+
+            for (i = 0; i < list.length; i++) {
+                var data = list[i];
                 var asset = new pc.Asset(data.name, data.type, data.file, data.data);
-                asset.id = parseInt(id);
+                asset.id = parseInt(data.id);
                 asset.preload = data.preload ? data.preload : false;
                 // tags
                 asset.tags.add(data.tags);
@@ -604,7 +707,7 @@ pc.extend(pc, function () {
                 _index[priorityScripts[i]] = true;
             }
 
-            // then interate hierarchy to get referenced scripts
+            // then iterate hierarchy to get referenced scripts
             var entities = scene.entities;
             for (key in entities) {
                 if (!entities[key].components.script) {
@@ -656,14 +759,21 @@ pc.extend(pc, function () {
         update: function (dt) {
             this.graphicsDevice.updateClientRect();
 
+            if (this.vr) this.vr.poll();
+
             // #ifdef PROFILER
             this.stats.frame.updateStart = pc.now();
             // #endif
 
             // Perform ComponentSystem update
-            pc.ComponentSystem.fixedUpdate(1.0 / 60.0, this._inTools);
+            if (pc.script.legacy)
+                pc.ComponentSystem.fixedUpdate(1.0 / 60.0, this._inTools);
+
             pc.ComponentSystem.update(dt, this._inTools);
             pc.ComponentSystem.postUpdate(dt, this._inTools);
+
+            // fire update event
+            this.fire("update", dt);
 
             if (this.controller) {
                 this.controller.update(dt);
@@ -677,9 +787,6 @@ pc.extend(pc, function () {
             if (this.gamepads) {
                 this.gamepads.update(dt);
             }
-
-            // fire update event
-            this.fire("update", dt);
 
             // #ifdef PROFILER
             this.stats.frame.updateTime = pc.now() - this.stats.frame.updateStart;
@@ -703,6 +810,8 @@ pc.extend(pc, function () {
             var renderer = this.renderer;
 
             this.root.syncHierarchy();
+
+            this.batcher.updateAll();
 
             // render the scene from each camera
             for (var i=0,len=cameras.length; i<len; i++) {
@@ -745,6 +854,7 @@ pc.extend(pc, function () {
             stats.cullTime = this.renderer._cullTime;
             stats.sortTime = this.renderer._sortTime;
             stats.skinTime = this.renderer._skinTime;
+            stats.morphTime = this.renderer._morphTime;
             stats.instancingTime = this.renderer._instancingTime;
             stats.otherPrimitives = 0;
             for(var i=0; i<prims.length; i++) {
@@ -760,7 +870,11 @@ pc.extend(pc, function () {
             this.renderer._cullTime = 0;
             this.renderer._sortTime = 0;
             this.renderer._skinTime = 0;
+            this.renderer._morphTime = 0;
             this.renderer._instancingTime = 0;
+            this.renderer._shadowMapTime = 0;
+            this.renderer._depthMapTime = 0;
+            this.renderer._forwardTime = 0;
 
             // Draw call stats
             stats = this.stats.drawCalls;
@@ -782,7 +896,7 @@ pc.extend(pc, function () {
             this.renderer._removedByInstancing = 0;
             this.graphicsDevice._drawCallsPerFrame = 0;
 
-            this.stats.misc.renderTargetCreationTime = this.graphicsDevice._renderTargetCreationTime;
+            this.stats.misc.renderTargetCreationTime = this.graphicsDevice.renderTargetCreationTime;
 
             stats = this.stats.particles;
             stats.updatesPerFrame = stats._updatesPerFrame;
@@ -813,9 +927,11 @@ pc.extend(pc, function () {
         * @function
         * @name pc.Application#setCanvasResolution
         * @description Change the resolution of the canvas, and set the way it behaves when the window is resized
-        * In AUTO mode, the resolution is change to match the size of the canvas when the canvas resizes
-        * In FIXED mode, the resolution remains until another call to setCanvasResolution()
-        * @param {pc.ResolutionMode} mode The mode to use when setting the resolution
+        * @param {string} mode The mode to use when setting the resolution. Can be:
+        * <ul>
+        *     <li>pc.RESOLUTION_AUTO: if width and height are not provided, canvas will be resized to match canvas client size.</li>
+        *     <li>pc.RESOLUTION_FIXED: resolution of canvas will be fixed.</li>
+        * </ul>
         * @param {Number} [width] The horizontal resolution, optional in AUTO mode, if not provided canvas clientWidth is used
         * @param {Number} [height] The vertical resolution, optional in AUTO mode, if not provided canvas clientHeight is used
         */
@@ -881,7 +997,13 @@ pc.extend(pc, function () {
             if (error) {
                 document.addEventListener('fullscreenerror', e, false);
             }
-            element.requestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
+
+            if (element.requestFullscreen) {
+                element.requestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
+            } else {
+                error();
+            }
+
         },
 
         /**
@@ -940,6 +1062,8 @@ pc.extend(pc, function () {
         * @returns {Object} A object containing the values calculated to use as width and height
         */
         resizeCanvas: function (width, height) {
+            if (!this._allowResize) return; // prevent resizing (e.g. if presenting in VR HMD)
+
             var windowWidth = window.innerWidth;
             var windowHeight = window.innerHeight;
 
@@ -1006,58 +1130,110 @@ pc.extend(pc, function () {
 
             this.scene.applySettings(settings);
 
-            if (settings.render.skybox && this._skyboxLast !== settings.render.skybox) {
-                // unsubscribe of old skybox
-                if (this._skyboxLast) {
-                    this.assets.off('add:' + this._skyboxLast, this._onSkyboxAdd, this);
-                    this.assets.off('load:' + this._skyboxLast, this._onSkyBoxLoad, this);
-                    this.assets.off('remove:' + this._skyboxLast, this._onSkyboxRemove, this);
+            if (settings.render.hasOwnProperty('skybox')) {
+                if (settings.render.skybox) {
+                    asset = this.assets.get(settings.render.skybox);
+
+                    if (asset) {
+                        this.setSkybox(asset);
+                    } else {
+                        this.assets.once('add:' + settings.render.skybox, this.setSkybox, this);
+                    }
+                } else {
+                    this.setSkybox(null);
                 }
-                this._skyboxLast = settings.render.skybox;
-
-                asset = this.assets.get(settings.render.skybox);
-
-                this.assets.on('load:' + settings.render.skybox, this._onSkyBoxLoad, this);
-                this.assets.once('remove:' + settings.render.skybox, this._onSkyboxRemove, this);
-
-                if (! asset)
-                    this.assets.once('add:' + settings.render.skybox, this._onSkyboxAdd, this);
-
-                if (asset) {
-                    if (asset.resource)
-                        this.scene.setSkybox(asset.resources);
-
-                    this._onSkyboxAdd(asset);
-                }
-            } else if (! settings.render.skybox) {
-                this._onSkyboxRemove({ id: this._skyboxLast });
-            } else if (this.scene.skyboxMip === 0 && settings.render.skybox) {
-                asset = this.assets.get(settings.render.skybox);
-                if (asset)
-                    this._onSkyboxAdd(asset);
             }
         },
 
-        _onSkyboxAdd: function(asset) {
+        /**
+        * @function
+        * @name pc.Application#setSkybox
+        * @description Sets the skybox asset to current scene, and subscribes to asset load/change events
+        * @param {pc.Asset} asset Asset of type `skybox` to be set to, or null to remove skybox
+        */
+        setSkybox: function(asset) {
+            if (asset) {
+                if (this._skyboxLast === asset.id) {
+                    if (this.scene.skyboxMip === 0 && ! asset.loadFaces) {
+                        this._skyboxLoad(asset);
+                    } else {
+                        this._onSkyboxChange(asset);
+                    }
+                    return;
+                }
+
+                if (this._skyboxLast) {
+                    this.assets.off('add:' + this._skyboxLast, this.setSkybox, this);
+                    this.assets.off('load:' + this._skyboxLast, this._onSkyboxChange, this);
+                    this.assets.off('remove:' + this._skyboxLast, this._skyboxRemove, this);
+                }
+
+                this._skyboxLast = asset.id;
+
+                this.assets.on('load:' + asset.id, this._onSkyboxChange, this);
+                this.assets.once('remove:' + asset.id, this._skyboxRemove, this);
+
+                if (asset.resource)
+                    this.scene.setSkybox(asset.resources);
+
+                this._skyboxLoad(asset);
+            } else {
+                if (! this._skyboxLast)
+                    return;
+
+                this._skyboxRemove({
+                    id: this._skyboxLast
+                });
+            }
+        },
+
+        _onVrChange: function (enabled) {
+            if (enabled) {
+                if (!this.vr) {
+                    this.vr = new pc.VrManager(this);
+                }
+            } else {
+                if (this.vr) {
+                    this.vr.destroy();
+                    this.vr = null;
+                }
+            }
+        },
+
+        _onSkyboxChange: function(asset) {
+            this.scene.setSkybox(asset.resources);
+        },
+
+        _skyboxLoad: function(asset) {
             if (this.scene.skyboxMip === 0)
                 asset.loadFaces = true;
 
             this.assets.load(asset);
+
+            this._onSkyboxChange(asset);
         },
 
-        _onSkyBoxLoad: function(asset) {
-            this.scene.setSkybox(asset.resources);
-        },
+        _skyboxRemove: function(asset) {
+            if (! this._skyboxLast)
+                return;
 
-        _onSkyboxRemove: function(asset) {
-            this.assets.off('add:' + asset.id, this._onSkyboxAdd, this);
-            this.assets.off('load:' + asset.id, this._onSkyBoxLoad, this);
+            this.assets.off('add:' + asset.id, this.setSkybox, this);
+            this.assets.off('load:' + asset.id, this._onSkyboxChange, this);
+            this.assets.off('remove:' + asset.id, this._skyboxRemove, this);
             this.scene.setSkybox(null);
             this._skyboxLast = null;
         },
 
         _firstBake: function() {
-            this.lightmapper.bake();
+            this.lightmapper.bake(null, this.scene.lightmapMode);
+        },
+
+        _firstBatch: function() {
+            if (this.scene._needsStaticPrepare) {
+                this.renderer.prepareStaticMeshes(this.graphicsDevice, this.scene);
+                this.scene._needsStaticPrepare = false;
+            }
+            this.batcher.generate();
         },
 
         /**
@@ -1073,6 +1249,9 @@ pc.extend(pc, function () {
             document.removeEventListener('mozvisibilitychange', this._visibilityChangeHandler);
             document.removeEventListener('msvisibilitychange', this._visibilityChangeHandler);
             document.removeEventListener('webkitvisibilitychange', this._visibilityChangeHandler);
+
+            this.root.destroy();
+            this.root = null;
 
             if (this.mouse) {
                 this.mouse.off('mouseup');
@@ -1104,9 +1283,13 @@ pc.extend(pc, function () {
                 this.controller = null;
             }
 
-            this.root.destroy();
-
             pc.ComponentSystem.destroy();
+
+            // destroy all texture resources
+            var assets = this.assets.list();
+            for (var i = 0; i < assets.length; i++) {
+                assets[i].unload();
+            }
 
             this.loader.destroy();
             this.loader = null;
@@ -1116,6 +1299,9 @@ pc.extend(pc, function () {
             this.systems = [];
             this.context = null;
 
+            this.graphicsDevice.clearShaderCache();
+            this.graphicsDevice.destroy();
+            this.graphicsDevice.destroyed = true;
             this.graphicsDevice = null;
 
             this.renderer = null;
@@ -1126,40 +1312,50 @@ pc.extend(pc, function () {
             }
 
             pc.http = new pc.Http();
+
+            // remove default particle texture
+            pc.ParticleEmitter.DEFAULT_PARAM_TEXTURE = null;
+
+            pc.destroyPostEffectQuad();
         }
     };
 
     // create tick function to be wrapped in closure
     var makeTick = function (_app) {
         var app = _app;
-        return function () {
-            if (!app.graphicsDevice) {
+        return function (timestamp) {
+            if (! app.graphicsDevice)
                 return;
-            }
 
             Application._currentApplication = app;
 
             // have current application pointer in pc
             pc.app = app;
 
-            // Submit a request to queue up a new animation frame immediately
-            window.requestAnimationFrame(app.tick);
-
-            var now = pc.now();
+            var now = timestamp || pc.now();
             var ms = now - (app._time || now);
             var dt = ms / 1000.0;
+            dt *= app.timeScale;
 
             app._time = now;
 
-            dt = pc.math.clamp(dt, 0, 0.1); // Maximum delta is 0.1s or 10 fps.
-            dt *= app.timeScale;
+            // Submit a request to queue up a new animation frame immediately
+            if (app.vr && app.vr.display) {
+                app.vr.display.requestAnimationFrame(app.tick);
+            } else {
+                window.requestAnimationFrame(app.tick);
+            }
 
             // #ifdef PROFILER
             app._fillFrameStats(now, dt, ms);
             // #endif
 
             app.update(dt);
-            app.render();
+
+            if (app.autoRender || app.renderNextFrame) {
+                app.render();
+                app.renderNextFrame = false;
+            }
 
             // set event data
             _frameEndData.timestamp = pc.now();
@@ -1167,7 +1363,11 @@ pc.extend(pc, function () {
 
             app.fire("frameend", _frameEndData);
             app.fire("frameEnd", _frameEndData);// deprecated old event, remove when editor updated
-        }
+
+            if (app.vr && app.vr.display && app.vr.display.presenting) {
+                app.vr.display.submitFrame();
+            }
+        };
     };
     // static data
     var _frameEndData = {};
@@ -1206,4 +1406,4 @@ pc.extend(pc, function () {
 
         Application: Application
     };
-} ());
+}());

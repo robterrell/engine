@@ -1,4 +1,6 @@
 pc.extend(pc, function () {
+    var _schema = [ 'enabled' ];
+
     /**
      * @name pc.ScriptComponentSystem
      * @description Create a new ScriptComponentSystem
@@ -15,7 +17,7 @@ pc.extend(pc, function () {
         this.ComponentType = pc.ScriptComponent;
         this.DataType = pc.ScriptComponentData;
 
-        this.schema = [ 'enabled' ];
+        this.schema = _schema;
 
         // list of all entities script components
         this._components = [ ];
@@ -28,11 +30,13 @@ pc.extend(pc, function () {
     };
     ScriptComponentSystem = pc.inherits(ScriptComponentSystem, pc.ComponentSystem);
 
+    pc.Component._buildAccessors(pc.ScriptComponent.prototype, _schema);
+
     pc.extend(ScriptComponentSystem.prototype, {
         initializeComponentData: function(component, data, properties) {
             this._components.push(component);
 
-            component.enabled = !! data.enabled;
+            component.enabled = data.hasOwnProperty('enabled') ? !!data.enabled : true;
 
             if (data.hasOwnProperty('order') && data.hasOwnProperty('scripts')) {
                 component._scriptsData = data.scripts;
@@ -48,16 +52,17 @@ pc.extend(pc, function () {
         },
 
         cloneComponent: function(entity, clone) {
+            var i, key;
             var order = [ ];
             var scripts = { };
 
-            for(var i = 0; i < entity.script._scripts.length; i++) {
+            for (i = 0; i < entity.script._scripts.length; i++) {
                 var scriptInstance = entity.script._scripts[i];
                 var scriptName = scriptInstance.__scriptType.__name;
                 order.push(scriptName);
 
                 var attributes = { };
-                for(var key in scriptInstance.__attributes)
+                for (key in scriptInstance.__attributes)
                     attributes[key] = scriptInstance.__attributes[key];
 
                 scripts[scriptName] = {
@@ -66,7 +71,7 @@ pc.extend(pc, function () {
                 };
             }
 
-            for(var key in entity.script._scriptsIndex) {
+            for (key in entity.script._scriptsIndex) {
                 var scriptData = entity.script._scriptsIndex[key];
                 if (key.awayting)
                     order.splice(key.ind, 0, key);

@@ -9,26 +9,26 @@ pc.extend(pc, function() {
 
     var _createTexture = function(device, width, height, pixelData, format, mult8Bit, filter) {
         if (!format) format = pc.PIXELFORMAT_RGBA32F;
+
+        var mipFilter = pc.FILTER_NEAREST;
+        if (filter && format === pc.PIXELFORMAT_R8_G8_B8_A8)
+            mipFilter = pc.FILTER_LINEAR;
+
         var texture = new pc.Texture(device, {
             width: width,
             height: height,
             format: format,
             cubemap: false,
-            autoMipmap: false
+            mipmaps: false,
+            minFilter: mipFilter,
+            magFilter: mipFilter,
+            addressU: pc.ADDRESS_CLAMP_TO_EDGE,
+            addressV: pc.ADDRESS_CLAMP_TO_EDGE
         });
-        texture.addressU = pc.ADDRESS_CLAMP_TO_EDGE;
-        texture.addressV = pc.ADDRESS_CLAMP_TO_EDGE;
-        texture.minFilter = pc.FILTER_NEAREST;
-        texture.magFilter = pc.FILTER_NEAREST;
 
         var pixels = texture.lock();
 
-        if (format == pc.PIXELFORMAT_R8_G8_B8_A8) {
-            if (filter) {
-                texture.minFilter = pc.FILTER_LINEAR;
-                texture.magFilter = pc.FILTER_LINEAR;
-            }
-
+        if (format === pc.PIXELFORMAT_R8_G8_B8_A8) {
             var temp = new Uint8Array(pixelData.length);
             for (var i = 0; i < pixelData.length; i++) {
                 temp[i] = pixelData[i] * mult8Bit * 255;
@@ -59,8 +59,6 @@ pc.extend(pc, function() {
 
     var particleTexHeight = 2;
     var particleTexChannels = 4;
-
-    var defaultParamTex = null;
 
     var velocityVec = new pc.Vec3();
     var localVelocityVec = new pc.Vec3();
@@ -141,7 +139,7 @@ pc.extend(pc, function() {
         var tex = targ._colorBuffer;
         var pixels = new Uint8Array(tex.width * tex.height * 4);
         var gl = device.gl;
-        gl.bindFramebuffer(gl.FRAMEBUFFER, targ._glFrameBuffer);
+        device.setFramebuffer(targ._glFrameBuffer);
         gl.readPixels(0, 0, tex.width, tex.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
         if (!tex._levels) tex._levels = [];
         tex._levels[0] = pixels;
@@ -155,7 +153,8 @@ pc.extend(pc, function() {
 
         this._addTimeTime = 0;
 
-        if (!defaultParamTex) {
+
+        if (!ParticleEmitter.DEFAULT_PARAM_TEXTURE) {
             // 1x1 white opaque
             //defaultParamTex = _createTexture(gd, 1, 1, [1,1,1,1], pc.PIXELFORMAT_R8_G8_B8_A8, 1.0);
 
@@ -176,9 +175,9 @@ pc.extend(pc, function() {
                     dtex[p * 4 + 3] = c;
                 }
             }
-            defaultParamTex = _createTexture(gd, resolution, resolution, dtex, pc.PIXELFORMAT_R8_G8_B8_A8, 1.0, true);
-            defaultParamTex.minFilter = pc.FILTER_LINEAR;
-            defaultParamTex.magFilter = pc.FILTER_LINEAR;
+            ParticleEmitter.DEFAULT_PARAM_TEXTURE = _createTexture(gd, resolution, resolution, dtex, pc.PIXELFORMAT_R8_G8_B8_A8, 1.0, true);
+            ParticleEmitter.DEFAULT_PARAM_TEXTURE.minFilter = pc.FILTER_LINEAR;
+            ParticleEmitter.DEFAULT_PARAM_TEXTURE.magFilter = pc.FILTER_LINEAR;
         }
 
         // Global system parameters
@@ -199,8 +198,9 @@ pc.extend(pc, function() {
         setProperty("emitterShape", pc.EMITTERSHAPE_BOX);
         setProperty("initialVelocity", 1);
         setProperty("wrap", false);
+        setProperty("localSpace", false);
         setProperty("wrapBounds", null);
-        setProperty("colorMap", defaultParamTex);
+        setProperty("colorMap", ParticleEmitter.DEFAULT_PARAM_TEXTURE);
         setProperty("normalMap", null);
         setProperty("loop", true);
         setProperty("preWarm", false);
@@ -453,6 +453,7 @@ pc.extend(pc, function() {
             this.worldBoundsSize.copy(this.worldBounds.halfExtents).scale(2);
 
             this.meshInstance.mesh.aabb = this.worldBounds;
+            this.meshInstance._aabbVer = 1 - this.meshInstance._aabbVer;
 
             if (this.pack8) this.calculateBoundsMad();
         },
@@ -536,7 +537,7 @@ pc.extend(pc, function() {
             var precision = this.precision;
             var gd = this.graphicsDevice;
 
-            if (this.colorMap===null) this.colorMap = defaultParamTex;
+            if (this.colorMap===null) this.colorMap = ParticleEmitter.DEFAULT_PARAM_TEXTURE;
 
             this.spawnBounds = this.emitterShape === pc.EMITTERSHAPE_BOX? this.emitterExtents : this.emitterRadius;
 
@@ -586,7 +587,7 @@ pc.extend(pc, function() {
             this.frameRandom.z = Math.random();
 
             this.particleTex = new Float32Array(this.numParticlesPot * particleTexHeight * particleTexChannels);
-            var emitterPos = this.node === null ? pc.Vec3.ZERO : this.node.getPosition();
+            var emitterPos = (this.node === null || this.localSpace) ? pc.Vec3.ZERO : this.node.getPosition();
             if (this.emitterShape === pc.EMITTERSHAPE_BOX) {
                 if (this.node === null){
                     spawnMatrix.setTRS(pc.Vec3.ZERO, pc.Quat.IDENTITY, this.spawnBounds);
@@ -682,7 +683,7 @@ pc.extend(pc, function() {
         _isAnimated: function () {
             return this.animNumFrames >= 1 &&
                    (this.animTilesX > 1 || this.animTilesY > 1) &&
-                   (this.colorMap && this.colorMap !== defaultParamTex || this.normalMap);
+                   (this.colorMap && this.colorMap !== ParticleEmitter.DEFAULT_PARAM_TEXTURE || this.normalMap);
         },
 
         calcSpawnPosition: function(emitterPos, i) {
@@ -708,6 +709,7 @@ pc.extend(pc, function() {
                 randomPosTformed.copy(emitterPos).add( randomPos.scale(rW * this.spawnBounds) );
             }
 
+            var particleRate, startSpawnTime;
             if (this.pack8) {
                 var packX = (randomPosTformed.data[0] - this.worldBounds.center.data[0]) / this.worldBoundsSize.data[0] + 0.5;
                 var packY = (randomPosTformed.data[1] - this.worldBounds.center.data[1]) / this.worldBoundsSize.data[1] + 0.5;
@@ -735,12 +737,12 @@ pc.extend(pc, function() {
                 var a2 = 1.0;
                 this.particleTex[i * particleTexChannels + 3 + this.numParticlesPot * particleTexChannels * 2] = a2;
 
-                var particleRate = pc.math.lerp(this.rate, this.rate2, rX);
-                var startSpawnTime = -particleRate * i;
-                    var maxNegLife = Math.max(this.lifetime, (this.numParticles - 1.0) * (Math.max(this.rate, this.rate2)));
-                    var maxPosLife = this.lifetime+1.0;
-                    startSpawnTime = (startSpawnTime + maxNegLife) / (maxNegLife + maxPosLife);
-                    var rgba3 = encodeFloatRGBA(startSpawnTime);
+                particleRate = pc.math.lerp(this.rate, this.rate2, rX);
+                startSpawnTime = -particleRate * i;
+                var maxNegLife = Math.max(this.lifetime, (this.numParticles - 1.0) * (Math.max(this.rate, this.rate2)));
+                var maxPosLife = this.lifetime+1.0;
+                startSpawnTime = (startSpawnTime + maxNegLife) / (maxNegLife + maxPosLife);
+                var rgba3 = encodeFloatRGBA(startSpawnTime);
                 this.particleTex[i * particleTexChannels + 0 + this.numParticlesPot * particleTexChannels * 3] = rgba3[0];
                 this.particleTex[i * particleTexChannels + 1 + this.numParticlesPot * particleTexChannels * 3] = rgba3[1];
                 this.particleTex[i * particleTexChannels + 2 + this.numParticlesPot * particleTexChannels * 3] = rgba3[2];
@@ -750,10 +752,10 @@ pc.extend(pc, function() {
                 this.particleTex[i * particleTexChannels] =     randomPosTformed.data[0];
                 this.particleTex[i * particleTexChannels + 1] = randomPosTformed.data[1];
                 this.particleTex[i * particleTexChannels + 2] = randomPosTformed.data[2];
-                this.particleTex[i * particleTexChannels + 3] = pc.math.lerp(this.startAngle * pc.math.DEG_TO_RAD, this.startAngle2 * pc.math.DEG_TO_RAD, rX);//this.particleNoize[i]);
+                this.particleTex[i * particleTexChannels + 3] = pc.math.lerp(this.startAngle * pc.math.DEG_TO_RAD, this.startAngle2 * pc.math.DEG_TO_RAD, rX);
 
-                var particleRate = pc.math.lerp(this.rate, this.rate2, rX);
-                var startSpawnTime = -particleRate * i;
+                particleRate = pc.math.lerp(this.rate, this.rate2, rX);
+                startSpawnTime = -particleRate * i;
                 this.particleTex[i * particleTexChannels + 3 + this.numParticlesPot * particleTexChannels] = startSpawnTime;
             }
         },
@@ -878,6 +880,7 @@ pc.extend(pc, function() {
                     toneMap: this.emitter.scene ? this.emitter.scene.toneMapping : 0,
                     fog: (this.emitter.scene && !this.emitter.noFog)? this.emitter.scene.fog : "none",
                     wrap: this.emitter.wrap && this.emitter.wrapBounds,
+                    localSpace: this.emitter.localSpace,
                     blend: this.blendType,
                     animTex: this.emitter._isAnimated(),
                     animTexLoop: this.emitter.animLoop,
@@ -955,7 +958,7 @@ pc.extend(pc, function() {
                     elements = [{
                             semantic: pc.SEMANTIC_ATTR0,
                             components: 4,
-                            type: pc.ELEMENTTYPE_FLOAT32
+                            type: pc.TYPE_FLOAT32
                         } // GPU: XYZ = quad vertex position; W = INT: particle ID, FRAC: random factor
                     ];
                     particleFormat = new pc.VertexFormat(this.graphicsDevice, elements);
@@ -966,19 +969,19 @@ pc.extend(pc, function() {
                     elements = [{
                         semantic: pc.SEMANTIC_ATTR0,
                         components: 4,
-                        type: pc.ELEMENTTYPE_FLOAT32
+                        type: pc.TYPE_FLOAT32
                     }, {
                         semantic: pc.SEMANTIC_ATTR1,
                         components: 4,
-                        type: pc.ELEMENTTYPE_FLOAT32
+                        type: pc.TYPE_FLOAT32
                     }, {
                         semantic: pc.SEMANTIC_ATTR2,
                         components: 4,
-                        type: pc.ELEMENTTYPE_FLOAT32
+                        type: pc.TYPE_FLOAT32
                     }, {
                         semantic: pc.SEMANTIC_ATTR3,
                         components: 2,
-                        type: pc.ELEMENTTYPE_FLOAT32
+                        type: pc.TYPE_FLOAT32
                     }];
                     particleFormat = new pc.VertexFormat(this.graphicsDevice, elements);
 
@@ -1101,7 +1104,7 @@ pc.extend(pc, function() {
         },
 
         addTime: function(delta, isOnStop) {
-            var i, j;
+            var a, b, c, i, j;
             var device = this.graphicsDevice;
 
             // #ifdef PROFILER
@@ -1136,7 +1139,7 @@ pc.extend(pc, function() {
 
                 var dirs = this.scene._globalLights;
                 for (i = 0; i < dirs.length; i++) {
-                    for (var c = 0; c < 6; c++) {
+                    for (c = 0; c < 6; c++) {
                         var weight = Math.max(this.lightCubeDir[c].dot(dirs[i]._direction), 0) * dirs[i]._intensity;
                         this.lightCube[c * 3] += dirs[i]._color.data[0] * weight;
                         this.lightCube[c * 3 + 1] += dirs[i]._color.data[1] * weight;
@@ -1164,6 +1167,9 @@ pc.extend(pc, function() {
             var emitterPos;
             var emitterScale = this.meshInstance.node === null ? pc.Vec3.ONE.data : this.meshInstance.node.localScale.data;
             this.material.setParameter("emitterScale", emitterScale);
+            if (this.localSpace && this.meshInstance.node) {
+                this.material.setParameter("emitterPos", this.meshInstance.node.getPosition().data);
+            }
 
             if (!this.useCpu) {
                 device.setBlending(false);
@@ -1196,7 +1202,7 @@ pc.extend(pc, function() {
                     this.constantMaxVel.setValue(maxVel);
                 }
 
-                emitterPos = this.meshInstance.node === null ? pc.Vec3.ZERO.data : this.meshInstance.node.getPosition().data;
+                emitterPos = (this.meshInstance.node === null || this.localSpace) ? pc.Vec3.ZERO.data : this.meshInstance.node.getPosition().data;
                 var emitterMatrix = this.meshInstance.node === null ? pc.Mat4.IDENTITY : this.meshInstance.node.getWorldTransform();
                 if (this.emitterShape === pc.EMITTERSHAPE_BOX) {
                     mat4ToMat3(spawnMatrix, spawnMatrix3);
@@ -1255,11 +1261,10 @@ pc.extend(pc, function() {
                 }
 
                 // Particle updater emulation
-                emitterPos = this.meshInstance.node === null ? pc.Vec3.ZERO : this.meshInstance.node.getPosition();
+                emitterPos = (this.meshInstance.node === null || this.localSpace) ? pc.Vec3.ZERO : this.meshInstance.node.getPosition();
                 var posCam = this.camera ? this.camera._node.getPosition() : pc.Vec3.ZERO;
 
                 var vertSize = 14;
-                var a, b, c;
                 var cf, cc;
                 var rotSpeed, rotSpeed2, scale2, alpha, alpha2;
                 var precision1 = this.precision - 1;
@@ -1490,24 +1495,22 @@ pc.extend(pc, function() {
                 // Particle sorting
                 // TODO: optimize
                 if (this.sort > pc.PARTICLESORT_NONE && this.camera) {
-                    for (i = 0; i < this.numParticles; i++) {
-                        this.vbToSort[i] = [i, Math.floor(this.vbCPU[i * this.numParticleVerts * 4 + 3])]; // particle id
-                    }
-                    for (i = 0; i < this.vbCPU.length; i++) {
-                        this.vbOld[i] = this.vbCPU[i];
-                    }
-
                     var particleDistance = this.particleDistance;
+                    for (i = 0; i < this.numParticles; i++) {
+                        this.vbToSort[i] = [i, particleDistance[Math.floor(this.vbCPU[i * this.numParticleVerts * 4 + 3])]]; // particle id
+                    }
+                    
+                    this.vbOld.set(this.vbCPU);
+
                     this.vbToSort.sort(function(a, b) {
-                        return particleDistance[a[1]] - particleDistance[b[1]];
+                        return a[1] - b[1];
                     });
 
                     for (i = 0; i < this.numParticles; i++) {
-                        var start = this.vbToSort[i][0];
-                        for (var corner = 0; corner < this.numParticleVerts; corner++) {
-                            for (j = 0; j < 4; j++) {
-                                this.vbCPU[i * this.numParticleVerts * 4 + corner * 4 + j] = this.vbOld[start * this.numParticleVerts * 4 + corner * 4 + j];
-                            }
+                        var src = this.vbToSort[i][0] * this.numParticleVerts * 4;
+                        var dest = i * this.numParticleVerts * 4;
+                        for (var j = 0; j < this.numParticleVerts * 4; j++) {
+                            this.vbCPU[dest + j] = this.vbOld[src + j];
                         }
                     }
                 }
@@ -1525,6 +1528,29 @@ pc.extend(pc, function() {
             // #ifdef PROFILER
             this._addTimeTime += pc.now() - startTime;
             // #endif
+        },
+
+        destroy: function () {
+            if (this.particleTexIN) this.particleTexIN.destroy();
+            if (this.particleTexOUT) this.particleTexOUT.destroy();
+            if (!this.useCpu && this.particleTexStart) this.particleTexStart.destroy();
+            if (this.rtParticleTexIN) this.rtParticleTexIN.destroy();
+            if (this.rtParticleTexOUT) this.rtParticleTexOUT.destroy();
+
+            // TODO: delete shaders from cache with reference counting
+            //if (this.shaderParticleUpdateRespawn) this.shaderParticleUpdateRespawn.destroy();
+            //if (this.shaderParticleUpdateNoRespawn) this.shaderParticleUpdateNoRespawn.destroy();
+            //if (this.shaderParticleUpdateOnStop) this.shaderParticleUpdateOnStop.destroy();
+
+            this.particleTexIN = null;
+            this.particleTexOUT = null;
+            this.particleTexStart = null;
+            this.rtParticleTexIN = null;
+            this.rtParticleTexOUT = null;
+
+            this.shaderParticleUpdateRespawn = null;
+            this.shaderParticleUpdateNoRespawn = null;
+            this.shaderParticleUpdateOnStop = null;
         }
     };
 

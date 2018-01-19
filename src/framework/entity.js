@@ -1,14 +1,16 @@
 pc.extend(pc, function () {
     /**
      * @name pc.Entity
+     * @param {String} [name] The non-unique name of the entity, default is "Untitled".
+     * @param {pc.Application} [app] The application the entity belongs to, default is the current application.
      * @class The Entity is the core primitive of a PlayCanvas game. Generally speaking an object in your game will consist of an {@link pc.Entity},
      * and a set of {@link pc.Component}s which are managed by their respective {@link pc.ComponentSystem}s. One of those components maybe a
      * {@link pc.ScriptComponent} which allows you to write custom code to attach to your Entity.
      * <p>
      * The Entity uniquely identifies the object and also provides a transform for position and orientation
      * which it inherits from {@link pc.GraphNode} so can be added into the scene graph.
-     * The Component and ComponentSystem provide the logic to give an Entity a specific type of behaviour. e.g. the ability to
-     * render a model or play a sound. Components are specific to a instance of an Entity and are attached (e.g. `this.entity.model`)
+     * The Component and ComponentSystem provide the logic to give an Entity a specific type of behavior. e.g. the ability to
+     * render a model or play a sound. Components are specific to an instance of an Entity and are attached (e.g. `this.entity.model`)
      * ComponentSystems allow access to all Entities and Components and are attached to the {@link pc.Application}.
      * </p>
      *
@@ -43,7 +45,8 @@ pc.extend(pc, function () {
      *
      * @extends pc.GraphNode
      */
-    var Entity = function(app){
+    var Entity = function(name, app){
+        if (name instanceof pc.Application) app = name;
         this._guid = pc.guid.create(); // Globally Unique Identifier
         this._batchHandle = null; // The handle for a RequestBatch, set this if you want to Component's to load their resources using a pre-existing RequestBatch.
         this.c = {}; // Component storage
@@ -62,10 +65,26 @@ pc.extend(pc, function () {
     /**
      * @function
      * @name pc.Entity#addComponent
-     * @description Create a new Component and add attach it to the Entity.
-     * Use this to add functionality to the Entity like rendering a model, adding light, etc.
-     * @param {String} type The name of the component type. e.g. "model", "light"
-     * @param {Object} data The initialization data for the specific component type
+     * @description Create a new component and add it to the entity.
+     * Use this to add functionality to the entity like rendering a model, playing sounds and so on.
+     * @param {String} type The name of the component to add. Valid strings are:
+     * <ul>
+     *   <li>"animation" - see {@link pc.AnimationComponent}</li>
+     *   <li>"audiolistener" - see {@link pc.AudioListenerComponent}</li>
+     *   <li>"camera" - see {@link pc.CameraComponent}</li>
+     *   <li>"collision" - see {@link pc.CollisionComponent}</li>
+     *   <li>"element" - see {@link pc.ElementComponent}</li>
+     *   <li>"light" - see {@link pc.LightComponent}</li>
+     *   <li>"model" - see {@link pc.ModelComponent}</li>
+     *   <li>"particlesystem" - see {@link pc.ParticleSystemComponent}</li>
+     *   <li>"rigidbody" - see {@link pc.RigidBodyComponent}</li>
+     *   <li>"screen" - see {@link pc.ScreenComponent}</li>
+     *   <li>"script" - see {@link pc.ScriptComponent}</li>
+     *   <li>"sound" - see {@link pc.SoundComponent}</li>
+     *   <li>"zone" - see {@link pc.ZoneComponent}</li>
+     * </ul>
+     * @param {Object} data The initialization data for the specific component type. Refer to each
+     * specific component's API reference page for details on valid values for this parameter.
      * @returns {pc.Component} The new Component that was attached to the entity
      * @example
      * var entity = new pc.Entity();
@@ -87,20 +106,20 @@ pc.extend(pc, function () {
             logERROR(pc.string.format("System: '{0}' doesn't exist", type));
             return null;
         }
-     };
+    };
 
-     /**
-      * @function
-      * @name pc.Entity#removeComponent
-      * @description Remove a component from the Entity.
-      * @param {String} type The name of the Component type
-      * @example
-      * var entity = new pc.Entity();
-      * entity.addComponent("light"); // add new light component
-      * //...
-      * entity.removeComponent("light"); // remove light component
-      */
-     Entity.prototype.removeComponent = function (type) {
+    /**
+     * @function
+     * @name pc.Entity#removeComponent
+     * @description Remove a component from the Entity.
+     * @param {String} type The name of the Component type
+     * @example
+     * var entity = new pc.Entity();
+     * entity.addComponent("light"); // add new light component
+     * //...
+     * entity.removeComponent("light"); // remove light component
+     */
+    Entity.prototype.removeComponent = function (type) {
         var system = this._app.systems[type];
         if (system) {
             if (this.c[type]) {
@@ -111,7 +130,7 @@ pc.extend(pc, function () {
         } else {
             logERROR(pc.string.format("System: '{0}' doesn't exist", type));
         }
-     };
+    };
 
     /**
      * @private
@@ -213,21 +232,6 @@ pc.extend(pc, function () {
         return this._request;
     };
 
-    Entity.prototype.addChild = function (child) {
-        if(child instanceof pc.Entity) {
-            var _debug = true;
-            if (_debug) {
-                var root = this.root;
-                var dupe = root.findOne("getGuid", child._guid);
-                if (dupe) {
-                    throw new Error("GUID already exists in graph");
-                }
-            }
-        }
-
-        pc.GraphNode.prototype.addChild.call(this, child);
-    };
-
     /**
      * @function
      * @name pc.Entity#findByGuid
@@ -279,8 +283,24 @@ pc.extend(pc, function () {
             if (child instanceof pc.Entity) {
                 child.destroy();
             }
+
+            // make sure child._parent is null because
+            // we have removed it from the children array before calling
+            // destroy on it
+            child._parent = null;
+
             child = children.shift();
         }
+
+        // fire destroy event
+        this.fire('destroy', this);
+
+        // clear all events
+        if (this._callbacks)
+            this._callbacks = null;
+
+        if (this._callbackActive)
+            this._callbackActive = null;
     };
 
     /**
@@ -318,3 +338,15 @@ pc.extend(pc, function () {
         Entity: Entity
     };
 }());
+
+
+/**
+* @event
+* @name pc.Entity#destroy
+* @description Fired after the entity is destroyed.
+* @param {pc.Entity} entity The entity that was destroyed.
+* @example
+* entity.on("destroy", function (e) {
+*     console.log('entity ' + e.name + ' has been destroyed');
+* });
+*/

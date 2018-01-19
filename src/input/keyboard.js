@@ -4,7 +4,7 @@ pc.extend(pc, function(){
     * @class The KeyboardEvent is passed into all event callbacks from the {@link pc.Keyboard}. It corresponds to a key press or release.
     * @description Create a new KeyboardEvent
     * @param {pc.Keyboard} keyboard The keyboard object which is firing the event.
-    * @param {pc.KeyboardEvent} event The original browser event that was fired.
+    * @param {KeyboardEvent} event The original browser event that was fired.
     * @property {Number} key The keyCode of the key that has changed. See the pc.KEY_* constants.
     * @property {Element} element The element that fired the keyboard event.
     * @property {KeyboardEvent} event The original browser event which was fired.
@@ -37,7 +37,7 @@ pc.extend(pc, function(){
         _keyboardEvent.element = event.target;
         _keyboardEvent.event = event;
         return _keyboardEvent;
-    };
+    }
 
     /**
      * @private
@@ -111,7 +111,7 @@ pc.extend(pc, function(){
      * @param {Element} [element] Element to attach Keyboard to. Note that elements like &lt;div&gt; can't
      * accept focus by default. To use keyboard events on an element like this it must have a value of 'tabindex' e.g. tabindex="0". For more details: <a href="http://www.w3.org/WAI/GL/WCAG20/WD-WCAG20-TECHS/SCR29.html">http://www.w3.org/WAI/GL/WCAG20/WD-WCAG20-TECHS/SCR29.html</a>
      * @param {Object} [options]
-     * @param {Boolean} [options.preventDefault] Call preventDefault() in key event handlers. This stops the default action of the event occuring. e.g. Ctrl+T will not open a new browser tab
+     * @param {Boolean} [options.preventDefault] Call preventDefault() in key event handlers. This stops the default action of the event occurring. e.g. Ctrl+T will not open a new browser tab
      * @param {Boolean} [options.stopPropagation] Call stopPropagation() in key event handlers. This stops the event bubbling up the DOM so no parent handlers will be notified of the event
      * @example
      * var keyboard = new pc.Keyboard(window); // attach keyboard listeners to the window

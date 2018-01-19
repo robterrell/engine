@@ -1,17 +1,5 @@
 pc.extend(pc, function () {
-    function getKey(layer, blendType, isCommand, materialId) {
-        // Key definition:
-        // Bit
-        // 31      : sign bit (leave)
-        // 27 - 30 : layer
-        // 26      : translucency type (opaque/transparent)
-        // 25      : Command bit (1: this key is for a command, 0: it's a mesh instance)
-        // 0 - 24  : Material ID (if oqaque) or 0 (if transparent - will be depth)
-        return ((layer & 0x0f) << 27) |
-               ((blendType===pc.BLEND_NONE? 1 : 0) << 26) |
-               ((isCommand ? 1 : 0) << 25) |
-               ((materialId & 0x1ffffff) << 0);
-    }
+    var id = 0;
 
     /**
      * @name pc.Mesh
@@ -30,6 +18,8 @@ pc.extend(pc, function () {
      * @property {pc.BoundingBox} aabb The axis-aligned bounding box for the object space vertices of this mesh.
      */
     var Mesh = function () {
+        this._refCount = 0;
+        this.id = id++;
         this.vertexBuffer = null;
         this.indexBuffer = [ null ];
         this.primitive = [{
@@ -38,30 +28,28 @@ pc.extend(pc, function () {
             count: 0
         }];
         this.skin = null;
+        this.morph = null;
 
         // AABB for object space mesh vertices
-        this.aabb = new pc.BoundingBox();
+        this._aabb = new pc.BoundingBox();
 
         // Array of object space AABBs of vertices affected by each bone
         this.boneAabb = null;
     };
 
-    var InstancingData = function (numObjects, dynamic, instanceSize) {
-        instanceSize = instanceSize || 16;
-        this.buffer = new Float32Array(numObjects * instanceSize);
-        this.count = numObjects;
-        this.offset = 0;
-        this.usage = dynamic? pc.BUFFER_DYNAMIC : pc.BUFFER_STATIC;
-        this._buffer = null;
-    };
-
-    InstancingData.prototype = {
-        update: function () {
-            if (this._buffer) {
-                this._buffer.setData(this.buffer);
+    Object.defineProperty(Mesh.prototype, 'aabb', {
+        get: function () {
+            return this.morph ? this.morph.aabb : this._aabb;
+        },
+        set: function (aabb) {
+            if (this.morph) {
+                this._aabb = this.morph._baseAabb = aabb;
+                this.morph._calculateAabb();
+            } else {
+                this._aabb = aabb;
             }
         }
-    };
+    });
 
     /**
      * @name pc.MeshInstance
@@ -79,16 +67,17 @@ pc.extend(pc, function () {
      * var meshInstance = new pc.MeshInstance(node, mesh, material);
      * @property {pc.BoundingBox} aabb The world space axis-aligned bounding box for this
      * mesh instance.
-     * @property {Boolean} castShadow Controls whether the mesh instances casts shadows.
+     * @property {Boolean} castShadow Controls whether the mesh instance casts shadows.
      * Defaults to false.
      * @property {Boolean} visible Enable rendering for this mesh instance. Use visible property to enable/disable rendering without overhead of removing from scene.
      * But note that the mesh instance is still in the hierarchy and still in the draw call list.
-     * @property {Number} layer The layer used by this mesh instance. Can be:
+     * @property {Number} layer The layer used by this mesh instance. Layers define drawing order. Can be:
      * <ul>
-     *     <li>pc.LAYER_WORLD</li>
-     *     <li>pc.LAYER_FX</li>
-     *     <li>pc.LAYER_GIZMO</li>
-     *     <li>pc.LAYER_HUD</li>
+     *     <li>pc.LAYER_WORLD or 15</li>
+     *     <li>pc.LAYER_FX or 2</li>
+     *     <li>pc.LAYER_GIZMO or 1</li>
+     *     <li>pc.LAYER_HUD or 0</li>
+     *     <li>Any number between 3 and 14 can be used as a custom layer.</li>
      * </ul>
      * Defaults to pc.LAYER_WORLD.
      * @property {pc.Material} material The material used by this mesh instance.
@@ -99,19 +88,25 @@ pc.extend(pc, function () {
      *     <li>pc.RENDERSTYLE_POINTS</li>
      * </ul>
      * Defaults to pc.RENDERSTYLE_SOLID.
+     * @property {Boolean} cull Controls whether the mesh instance can be culled with frustum culling
      */
     var MeshInstance = function MeshInstance(node, mesh, material) {
         this._key = [0,0];
         this._shader = [null, null, null];
 
+        this.isStatic = false;
+        this._staticLightList = null;
+        this._staticSource = null;
+
         this.node = node;           // The node that defines the transform of the mesh instance
-        this.mesh = mesh;           // The mesh that this instance renders
+        this._mesh = mesh;           // The mesh that this instance renders
+        mesh._refCount++;
         this.material = material;   // The material with which to render this instance
 
-        this._shaderDefs = 256; // 1 byte toggles, 3 bytes light mask; Default value is no toggles and mask = 1
-        this._shaderDefs |= mesh.vertexBuffer.format.hasUv0? pc.SHADERDEF_UV0 : 0;
-        this._shaderDefs |= mesh.vertexBuffer.format.hasUv1? pc.SHADERDEF_UV1 : 0;
-        this._shaderDefs |= mesh.vertexBuffer.format.hasColor? pc.SHADERDEF_VCOLOR : 0;
+        this._shaderDefs = (1<<16); // 2 byte toggles, 2 bytes light mask; Default value is no toggles and mask = 1
+        this._shaderDefs |= mesh.vertexBuffer.format.hasUv0 ? pc.SHADERDEF_UV0 : 0;
+        this._shaderDefs |= mesh.vertexBuffer.format.hasUv1 ? pc.SHADERDEF_UV1 : 0;
+        this._shaderDefs |= mesh.vertexBuffer.format.hasColor ? pc.SHADERDEF_VCOLOR : 0;
 
         // Render options
         this.visible = true;
@@ -119,6 +114,7 @@ pc.extend(pc, function () {
         this.renderStyle = pc.RENDERSTYLE_SOLID;
         this.castShadow = false;
         this._receiveShadow = true;
+        this._screenSpace = false;
         this.drawToDepth = true;
         this.cull = true;
         this.pick = true;
@@ -128,16 +124,28 @@ pc.extend(pc, function () {
         this.updateKey();
 
         this._skinInstance = null;
+        this.morphInstance = null;
         this.instancingData = null;
 
         // World space AABB
         this.aabb = new pc.BoundingBox();
-        this.normalMatrix = new pc.Mat3();
 
         this._boneAabb = null;
+        this._aabbVer = -1;
 
         this.parameters = {};
     };
+
+    Object.defineProperty(MeshInstance.prototype, 'mesh', {
+        get: function () {
+            return this._mesh;
+        },
+        set: function (mesh) {
+            if (this._mesh) this._mesh._refCount--;
+            this._mesh = mesh;
+            if (mesh) mesh._refCount++;
+        }
+    });
 
     Object.defineProperty(MeshInstance.prototype, 'aabb', {
         get: function () {
@@ -146,7 +154,7 @@ pc.extend(pc, function () {
 
             if (this.skinInstance) {
                 var numBones = this.mesh.skin.boneNames.length;
-                var i;
+                var boneUsed, i;
                 // Initialize local bone AABBs if needed
                 if (!this.mesh.boneAabb) {
 
@@ -157,13 +165,13 @@ pc.extend(pc, function () {
                     var vertSize = this.mesh.vertexBuffer.format.size;
                     var index;
                     var offsetP, offsetI, offsetW;
-                    var j, k;
+                    var j, k, l, p;
                     for(i=0; i<elems.length; i++) {
-                        if (elems[i].name===pc.SEMANTIC_POSITION) {
+                        if (elems[i].name === pc.SEMANTIC_POSITION) {
                             offsetP = elems[i].offset;
-                        } else if (elems[i].name===pc.SEMANTIC_BLENDINDICES) {
+                        } else if (elems[i].name === pc.SEMANTIC_BLENDINDICES) {
                             offsetI = elems[i].offset;
-                        } else if (elems[i].name===pc.SEMANTIC_BLENDWEIGHT) {
+                        } else if (elems[i].name === pc.SEMANTIC_BLENDWEIGHT) {
                             offsetW = elems[i].offset;
                         }
                     }
@@ -178,13 +186,14 @@ pc.extend(pc, function () {
                     var x, y, z;
                     var boneMin = [];
                     var boneMax = [];
-                    var boneUsed = this.mesh.boneUsed;
+                    boneUsed = this.mesh.boneUsed;
 
                     for(i=0; i<numBones; i++) {
                         boneMin[i] = new pc.Vec3(Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE);
                         boneMax[i] = new pc.Vec3(-Number.MAX_VALUE, -Number.MAX_VALUE, -Number.MAX_VALUE);
                     }
 
+                    // Find bone AABBs by attached vertices
                     for(j=0; j<numVerts; j++) {
                         for(k=0; k<4; k++) {
                             if (dataF[j * vertSizeF + offsetWF + k] > 0) {
@@ -210,6 +219,89 @@ pc.extend(pc, function () {
                         }
                     }
 
+                    // Apply morphing to bone AABBs
+                    if (this.morphInstance) {
+                        var vertIndex;
+                        var targets = this.morphInstance.morph._targets;
+
+                        // Find min/max morphed vertex positions
+                        var minMorphedPos = new Float32Array(numVerts * 3);
+                        var maxMorphedPos = new Float32Array(numVerts * 3);
+                        var m, dx, dy, dz;
+                        var target, mtIndices, mtIndicesLength, deltaPos;
+
+                        for(j=0; j<numVerts; j++) {
+                            minMorphedPos[j * 3] = maxMorphedPos[j * 3] = dataF[j * vertSizeF + offsetPF];
+                            minMorphedPos[j * 3 + 1] = maxMorphedPos[j * 3 + 1] = dataF[j * vertSizeF + offsetPF + 1];
+                            minMorphedPos[j * 3 + 2] = maxMorphedPos[j * 3 + 2] = dataF[j * vertSizeF + offsetPF + 2];
+                        }
+
+                        for(l=0; l<targets.length; l++) {
+                            target = targets[l];
+                            mtIndices = target.indices;
+                            mtIndicesLength = mtIndices.length;
+                            deltaPos = target.deltaPositions;
+                            for(k=0; k<mtIndicesLength; k++) {
+                                vertIndex = mtIndices[k];
+
+                                dx = deltaPos[k * 3];
+                                dy = deltaPos[k * 3 + 1];
+                                dz = deltaPos[k * 3 + 2];
+
+                                if (dx < 0) {
+                                    minMorphedPos[vertIndex * 3] += dx;
+                                } else {
+                                    maxMorphedPos[vertIndex * 3] += dx;
+                                }
+
+                                if (dy < 0) {
+                                    minMorphedPos[vertIndex * 3 + 1] += dy;
+                                } else {
+                                    maxMorphedPos[vertIndex * 3 + 1] += dy;
+                                }
+
+                                if (dz < 0) {
+                                    minMorphedPos[vertIndex * 3 + 2] += dz;
+                                } else {
+                                    maxMorphedPos[vertIndex * 3 + 2] += dz;
+                                }
+                            }
+                        }
+
+                        // Re-evaluate bone AABBs against min/max morphed positions
+                        for(l=0; l<targets.length; l++) {
+                            target = targets[l];
+                            mtIndices = target.indices;
+                            mtIndicesLength = mtIndices.length;
+                            deltaPos = target.deltaPositions;
+                            for(k=0; k<mtIndicesLength; k++) {
+                                vertIndex = mtIndices[k];
+                                for(m=0; m<4; m++) {
+                                    if (dataF[vertIndex * vertSizeF + offsetWF + m] > 0) {
+                                        index = data8[vertIndex * vertSize + offsetI + m];
+                                        // Vertex vertIndex is affected by bone index
+                                        bMax = boneMax[index];
+                                        bMin = boneMin[index];
+
+                                        x = minMorphedPos[vertIndex * 3];
+                                        y = minMorphedPos[vertIndex * 3 + 1];
+                                        z = minMorphedPos[vertIndex * 3 + 2];
+                                        if (bMin.x > x) bMin.x = x;
+                                        if (bMin.y > y) bMin.y = y;
+                                        if (bMin.z > z) bMin.z = z;
+
+                                        x = maxMorphedPos[vertIndex * 3];
+                                        y = maxMorphedPos[vertIndex * 3 + 1];
+                                        z = maxMorphedPos[vertIndex * 3 + 2];
+                                        if (bMax.x < x) bMax.x = x;
+                                        if (bMax.y < y) bMax.y = y;
+                                        if (bMax.z < z) bMax.z = z;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     var aabb;
                     for(i=0; i<numBones; i++) {
                         aabb = new pc.BoundingBox();
@@ -226,7 +318,7 @@ pc.extend(pc, function () {
                     }
                 }
 
-                var boneUsed = this.mesh.boneUsed;
+                boneUsed = this.mesh.boneUsed;
 
                 // Update per-instance bone AABBs
                 for(i=0; i<this.mesh.boneAabb.length; i++) {
@@ -246,9 +338,9 @@ pc.extend(pc, function () {
                         this._aabb.add(this._boneAabb[i]);
                     }
                 }
-            } else if (this.node._dirtyAabb) {
-                this._aabb.setFromTransformedAabb(this.mesh.aabb, this.node.worldTransform);
-                this.node._dirtyAabb = false;
+            } else if (this.node._aabbVer !== this._aabbVer) {
+                this._aabb.setFromTransformedAabb(this.mesh.aabb, this.node.getWorldTransform());
+                this._aabbVer = this.node._aabbVer;
             }
             return this._aabb;
         },
@@ -277,10 +369,12 @@ pc.extend(pc, function () {
 
             this._material = material;
 
-            // Record that the material is referenced by this mesh instance
-            this._material.meshInstances.push(this);
+            if (this._material) {
+                // Record that the material is referenced by this mesh instance
+                this._material.meshInstances.push(this);
 
-            this.updateKey();
+                this.updateKey();
+            }
         }
     });
 
@@ -302,6 +396,7 @@ pc.extend(pc, function () {
             this._receiveShadow = val;
             this._shaderDefs = val? (this._shaderDefs & ~pc.SHADERDEF_NOSHADOW) : (this._shaderDefs | pc.SHADERDEF_NOSHADOW);
             this._shader[pc.SHADER_FORWARD] = null;
+            this._shader[pc.SHADER_FORWARDHDR] = null;
         }
     });
 
@@ -315,6 +410,17 @@ pc.extend(pc, function () {
             for(var i=0; i<this._shader.length; i++) {
                 this._shader[i] = null;
             }
+        }
+    });
+
+    Object.defineProperty(MeshInstance.prototype, 'screenSpace', {
+        get: function () {
+            return this._screenSpace;
+        },
+        set: function (val) {
+            this._screenSpace = val;
+            this._shaderDefs = val ? (this._shaderDefs | pc.SHADERDEF_SCREENSPACE) : (this._shaderDefs & ~pc.SHADERDEF_SCREENSPACE);
+            this._shader[pc.SHADER_FORWARD] = null;
         }
     });
 
@@ -335,12 +441,13 @@ pc.extend(pc, function () {
      */
     Object.defineProperty(MeshInstance.prototype, 'mask', {
         get: function () {
-            return this._shaderDefs >> 8;
+            return this._shaderDefs >> 16;
         },
         set: function (val) {
-            var toggles = this._shaderDefs & 0x000000FF;
-            this._shaderDefs = toggles | (val << 8);
+            var toggles = this._shaderDefs & 0x0000FFFF;
+            this._shaderDefs = toggles | (val << 16);
             this._shader[pc.SHADER_FORWARD] = null;
+            this._shader[pc.SHADER_FORWARDHDR] = null;
         }
     });
 
@@ -351,7 +458,9 @@ pc.extend(pc, function () {
 
         updateKey: function () {
             var material = this.material;
-            this._key[pc.SORTKEY_FORWARD] = getKey(this.layer, material.blendType, false, material.id);
+            this._key[pc.SORTKEY_FORWARD] = getKey(this.layer,
+                (material.alphaToCoverage || material.alphaTest) ? pc.BLEND_NORMAL : material.blendType, // render alphatest/atoc after opaque
+                false, material.id);
         },
 
         setParameter : pc.Material.prototype.setParameter,
@@ -376,6 +485,37 @@ pc.extend(pc, function () {
             this._key[pc.SORTKEY_FORWARD] = val;
         }
     });
+
+    var InstancingData = function (numObjects, dynamic, instanceSize) {
+        instanceSize = instanceSize || 16;
+        this.buffer = new Float32Array(numObjects * instanceSize);
+        this.count = numObjects;
+        this.offset = 0;
+        this.usage = dynamic? pc.BUFFER_DYNAMIC : pc.BUFFER_STATIC;
+        this._buffer = null;
+    };
+
+    InstancingData.prototype = {
+        update: function () {
+            if (this._buffer) {
+                this._buffer.setData(this.buffer);
+            }
+        }
+    };
+
+    function getKey(layer, blendType, isCommand, materialId) {
+        // Key definition:
+        // Bit
+        // 31      : sign bit (leave)
+        // 27 - 30 : layer
+        // 26      : translucency type (opaque/transparent)
+        // 25      : Command bit (1: this key is for a command, 0: it's a mesh instance)
+        // 0 - 24  : Material ID (if oqaque) or 0 (if transparent - will be depth)
+        return ((layer & 0x0f) << 27) |
+               ((blendType === pc.BLEND_NONE ? 1 : 0) << 26) |
+               ((isCommand ? 1 : 0) << 25) |
+               ((materialId & 0x1ffffff) << 0);
+    }
 
     return {
         Command: Command,

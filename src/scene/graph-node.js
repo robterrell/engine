@@ -1,12 +1,20 @@
 pc.extend(pc, function () {
+    var scaleCompensatePosTransform = new pc.Mat4();
+    var scaleCompensatePos = new pc.Vec3();
+    var scaleCompensateRot = new pc.Quat();
+    var scaleCompensateRot2 = new pc.Quat();
+    var scaleCompensateScale = new pc.Vec3();
+    var scaleCompensateScaleForParent = new pc.Vec3();
+
     /**
      * @name pc.GraphNode
      * @class A hierarchical scene node.
+     * @param {String} [name] The non-unique name of the graph node, default is "Untitled".
      * @property {String} name The non-unique name of a graph node.
-     * @property {pc.Tags} tags Interface for taggin. Allows to manage tags for nodes and find nodes using findByTag method.
+     * @property {pc.Tags} tags Interface for tagging graph nodes. Tag based searches can be performed using the {@link pc.GraphNode#findByTag} function.
      */
-    var GraphNode = function GraphNode() {
-        this.name = "Untitled"; // Non-unique human readable name
+    var GraphNode = function GraphNode(name) {
+        this.name = typeof name === "string" ? name : "Untitled"; // Non-unique human readable name
         this.tags = new pc.Tags(this);
 
         this._labels = { };
@@ -23,22 +31,26 @@ pc.extend(pc, function () {
         this.eulerAngles = new pc.Vec3(0, 0, 0);
 
         this.localTransform = new pc.Mat4();
-        this.dirtyLocal = false;
-        this._dirtyScale = true;
-        this._dirtyAabb = true;
+        this._dirtyLocal = false;
+        this._aabbVer = 0;
 
         this.worldTransform = new pc.Mat4();
-        this.dirtyWorld = false;
+        this._dirtyWorld = false;
+
+        this.normalMatrix = new pc.Mat3();
+        this._dirtyNormal = true;
 
         this._right = new pc.Vec3();
         this._up = new pc.Vec3();
         this._forward = new pc.Vec3();
 
         this._parent = null;
-        this._children = [];
+        this._children = [ ];
 
         this._enabled = true;
         this._enabledInHierarchy = false;
+
+        this.scaleCompensation = false;
     };
 
     /**
@@ -186,13 +198,16 @@ pc.extend(pc, function () {
             clone.eulerAngles.copy(this.eulerAngles);
 
             clone.localTransform.copy(this.localTransform);
-            clone.dirtyLocal = this.dirtyLocal;
+            clone._dirtyLocal = this._dirtyLocal;
 
             clone.worldTransform.copy(this.worldTransform);
-            clone.dirtyWorld = this.dirtyWorld;
-            clone._dirtyAabb = this._dirtyAabb;
+            clone._dirtyWorld = this._dirtyWorld;
+            clone._dirtyNormal = this._dirtyNormal;
+            clone._aabbVer = this._aabbVer + 1;
 
             clone._enabled = this._enabled;
+
+            clone.scaleCompensation = this.scaleCompensation;
 
             // false as this node is not in the hierarchy yet
             clone._enabledInHierarchy = false;
@@ -207,14 +222,25 @@ pc.extend(pc, function () {
         /**
          * @function
          * @name pc.GraphNode#find
-         * @description Search the graph for nodes using a supplied method that implements test for seach.
-         * @param {Function} fn Method which is executed for each descendant node, to test if node satisfies search logic. Returning true from that method will include node into results.
+         * @description Search the graph for nodes that satisfy conditions.
+         * @param {Function|String} attr This can either be a method or a string.
+         * If it's a method it is executed for each descendant node, to test if node satisfies search logic.
+         * Returning true from that method will include node into results.
+         * If it's a string then it represents the name of a field or a method of the node.
+         * If this is the name of a field then the value passed as the second argument will be checked for equality.
+         * If this is the name of a function then the return value of the function will be checked for equality against the valued passed as the second argument to this function.
+         * @param {Object} value If the first argument (attr) is a property name then this value will be checked against the value of the property.
          * @returns {pc.GraphNode[]} An array of GraphNodes
          * @example
          * // finds all nodes that have model component and have `door` in their lower cased name
          * var doors = house.find(function(node) {
          *     return node.model && node.name.toLowerCase().indexOf('door') !== -1;
          * });
+         *
+         * @example
+         * // finds all nodes that have name equal to 'Test'
+         * var entities = parent.find('name', 'Test');
+         *
          */
         find: function (attr, value) {
             var results = [ ];
@@ -258,7 +284,7 @@ pc.extend(pc, function () {
         /**
          * @function
          * @name pc.GraphNode#findOne
-         * @description Depth first search the graph for nodes using suplied method to find first matching node.
+         * @description Depth first search the graph for nodes using supplied method to find first matching node.
          * @param {Function} fn Method which is executed for each descendant node, to test if node satisfies search logic. Returning true from that method will stop search and return that node.
          * @returns {pc.GraphNode} A single graph node.
          * @example
@@ -307,6 +333,28 @@ pc.extend(pc, function () {
             return null;
         },
 
+        /**
+         * @function
+         * @name pc.GraphNode#findByTag
+         * @description Return all graph nodes that satisfy the search query.
+         * Query can be simply a string, or comma separated strings,
+         * to have inclusive results of assets that match at least one query.
+         * A query that consists of an array of tags can be used to match graph nodes that have each tag of array
+         * @param {String} query Name of a tag or array of tags
+         * @returns {pc.GraphNode[]} A list of all graph nodes that match the query
+         * @example
+         * var animals = node.findByTag("animal");
+         * // returns all graph nodes that tagged by `animal`
+         * @example
+         * var birdsAndMammals = node.findByTag("bird", "mammal");
+         * // returns all graph nodes that tagged by `bird` OR `mammal`
+         * @example
+         * var meatEatingMammals = node.findByTag([ "carnivore", "mammal" ]);
+         * // returns all assets that tagged by `carnivore` AND `mammal`
+         * @example
+         * var meatEatingMammalsAndReptiles = node.findByTag([ "carnivore", "mammal" ], [ "carnivore", "reptile" ]);
+         * // returns all assets that tagged by (`carnivore` AND `mammal`) OR (`carnivore` AND `reptile`)
+         */
         findByTag: function() {
             var tags = this.tags._processArguments(arguments);
             return this._findByTag(tags);
@@ -434,6 +482,7 @@ pc.extend(pc, function () {
         },
 
         /**
+         * @private
          * @deprecated
          * @function
          * @name pc.GraphNode#getParent
@@ -482,6 +531,8 @@ pc.extend(pc, function () {
         },
 
         /**
+         * @private
+         * @deprecated
          * @function
          * @name pc.GraphNode#getChildren
          * @description Get the children of this graph node.
@@ -518,7 +569,7 @@ pc.extend(pc, function () {
          * @function
          * @name pc.GraphNode#getLocalEulerAngles
          * @description Get the rotation in local space for the specified GraphNode. The rotation
-         * is returned as eurler angles in a 3-dimensional vector where the order is XYZ. The
+         * is returned as euler angles in a 3-dimensional vector where the order is XYZ. The
          * returned vector should be considered read-only. To update the local rotation, use
          * {@link pc.GraphNode#setLocalEulerAngles}.
          * @returns {pc.Vec3} The local space rotation of the graph node as euler angles in XYZ order.
@@ -588,17 +639,16 @@ pc.extend(pc, function () {
          * var transform = this.entity.getLocalTransform();
          */
         getLocalTransform: function () {
-            if (this.dirtyLocal) {
+            if (this._dirtyLocal) {
                 this.localTransform.setTRS(this.localPosition, this.localRotation, this.localScale);
-
-                this.dirtyLocal = false;
-                this.dirtyWorld = true;
-                this._dirtyAabb = true;
+                this._dirtyLocal = false;
             }
             return this.localTransform;
         },
 
         /**
+         * @private
+         * @deprecated
          * @function
          * @name pc.GraphNode#getName
          * @description Get the human-readable name for this graph node. Note the name
@@ -654,24 +704,16 @@ pc.extend(pc, function () {
          * var transform = this.entity.getWorldTransform();
          */
         getWorldTransform: function () {
-            var syncList = [];
-
-            return function () {
-                var current = this;
-                syncList.length = 0;
-
-                while (current !== null) {
-                    syncList.push(current);
-                    current = current._parent;
-                }
-
-                for (var i = syncList.length - 1; i >= 0; i--) {
-                    syncList[i].sync();
-                }
-
+            if (! this._dirtyLocal && ! this._dirtyWorld)
                 return this.worldTransform;
-            };
-        }(),
+
+            if (this._parent)
+                this._parent.getWorldTransform();
+
+            this._sync();
+
+            return this.worldTransform;
+        },
 
         /**
          * @function
@@ -703,7 +745,7 @@ pc.extend(pc, function () {
          * @param {Number} y rotation around y-axis in degrees.
          * @param {Number} z rotation around z-axis in degrees.
          * @example
-         * this.entity.setLocalEulerAngles(0, 90, 0); // Set rotation of 90 degress around y-axis.
+         * this.entity.setLocalEulerAngles(0, 90, 0); // Set rotation of 90 degrees around y-axis.
          */
         /**
          * @function
@@ -713,25 +755,17 @@ pc.extend(pc, function () {
          * @param {pc.Vec3} e vector containing euler angles in XYZ order.
          * @example
          * var angles = new pc.Vec3(0, 90, 0);
-         * this.entity.setLocalEulerAngles(angles); // Set rotation of 90 degress around y-axis.
+         * this.entity.setLocalEulerAngles(angles); // Set rotation of 90 degrees around y-axis.
          */
-        setLocalEulerAngles: function () {
-            var ex, ey, ez;
-            switch (arguments.length) {
-                case 1:
-                    ex = arguments[0].x;
-                    ey = arguments[0].y;
-                    ez = arguments[0].z;
-                    break;
-                case 3:
-                    ex = arguments[0];
-                    ey = arguments[1];
-                    ez = arguments[2];
-                    break;
+        setLocalEulerAngles: function (x, y, z) {
+            if (x instanceof pc.Vec3) {
+                this.localRotation.setFromEulerAngles(x.data[0], x.data[1], x.data[2]);
+            } else {
+                this.localRotation.setFromEulerAngles(x, y, z);
             }
 
-            this.localRotation.setFromEulerAngles(ex, ey, ez);
-            this.dirtyLocal = true;
+            if (! this._dirtyLocal)
+                this._dirtify(true);
         },
 
         /**
@@ -753,13 +787,15 @@ pc.extend(pc, function () {
          * var pos = new pc.Vec3(0, 10, 0);
          * this.entity.setLocalPosition(pos)
          */
-        setLocalPosition: function () {
-            if (arguments.length === 1) {
-                this.localPosition.copy(arguments[0]);
+        setLocalPosition: function (x, y, z) {
+            if (x instanceof pc.Vec3) {
+                this.localPosition.copy(x);
             } else {
-                this.localPosition.set(arguments[0], arguments[1], arguments[2]);
+                this.localPosition.set(x, y, z);
             }
-            this.dirtyLocal = true;
+
+            if (! this._dirtyLocal)
+                this._dirtify(true);
         },
 
         /**
@@ -782,13 +818,15 @@ pc.extend(pc, function () {
          * // Set to the identity quaternion
          * this.entity.setLocalRotation(0, 0, 0, 1);
          */
-        setLocalRotation: function (q) {
-            if (arguments.length === 1) {
-                this.localRotation.copy(arguments[0]);
+        setLocalRotation: function (x, y, z, w) {
+            if (x instanceof pc.Quat) {
+                this.localRotation.copy(x);
             } else {
-                this.localRotation.set(arguments[0], arguments[1], arguments[2], arguments[3]);
+                this.localRotation.set(x, y, z, w);
             }
-            this.dirtyLocal = true;
+
+            if (! this._dirtyLocal)
+                this._dirtify(true);
         },
 
         /**
@@ -810,20 +848,20 @@ pc.extend(pc, function () {
          * var scale = new pc.Vec3(10, 10, 10);
          * this.entity.setLocalScale(scale);
          */
-        setLocalScale: function () {
-            if (arguments.length === 1) {
-                this.localScale.copy(arguments[0]);
+        setLocalScale: function (x, y, z) {
+            if (x instanceof pc.Vec3) {
+                this.localScale.copy(x);
             } else {
-                this.localScale.set(arguments[0], arguments[1], arguments[2]);
+                this.localScale.set(x, y, z);
             }
-            this.dirtyLocal = true;
-            this._dirtyScale = true;
-            for (var i = 0, len = this._children.length; i < len; i++) {
-                this._children[i]._dirtyScale = true;
-            }
+
+            if (! this._dirtyLocal)
+                this._dirtify(true);
         },
 
         /**
+         * @private
+         * @deprecated
          * @function
          * @name pc.GraphNode#setName
          * @description Sets the non-unique name for this graph node.
@@ -833,6 +871,29 @@ pc.extend(pc, function () {
          */
         setName: function (name) {
             this.name = name;
+        },
+
+        _dirtify: function(local) {
+            if ((! local || (local && this._dirtyLocal)) && this._dirtyWorld)
+                return;
+
+            if (local)
+                this._dirtyLocal = true;
+
+            if (! this._dirtyWorld) {
+                this._dirtyWorld = true;
+
+                var i = this._children.length;
+                while(i--) {
+                    if (this._children[i]._dirtyWorld)
+                        continue;
+
+                    this._children[i]._dirtify();
+                }
+            }
+
+            this._dirtyNormal = true;
+            this._aabbVer++;
         },
 
         /**
@@ -858,11 +919,11 @@ pc.extend(pc, function () {
             var position = new pc.Vec3();
             var invParentWtm = new pc.Mat4();
 
-            return function () {
-                if (arguments.length === 1) {
-                    position.copy(arguments[0]);
+            return function (x, y, z) {
+                if (x instanceof pc.Vec3) {
+                    position.copy(x);
                 } else {
-                    position.set(arguments[0], arguments[1], arguments[2]);
+                    position.set(x, y, z);
                 }
 
                 if (this._parent === null) {
@@ -871,7 +932,9 @@ pc.extend(pc, function () {
                     invParentWtm.copy(this._parent.getWorldTransform()).invert();
                     invParentWtm.transformPoint(position, this.localPosition);
                 }
-                this.dirtyLocal = true;
+
+                if (! this._dirtyLocal)
+                    this._dirtify(true);
             };
         }(),
 
@@ -901,11 +964,11 @@ pc.extend(pc, function () {
             var rotation = new pc.Quat();
             var invParentRot = new pc.Quat();
 
-            return function () {
-                if (arguments.length === 1) {
-                    rotation.copy(arguments[0]);
+            return function (x, y, z, w) {
+                if (x instanceof pc.Quat) {
+                    rotation.copy(x);
                 } else {
-                    rotation.set(arguments[0], arguments[1], arguments[2], arguments[3]);
+                    rotation.set(x, y, z, w);
                 }
 
                 if (this._parent === null) {
@@ -915,7 +978,9 @@ pc.extend(pc, function () {
                     invParentRot.copy(parentRot).invert();
                     this.localRotation.copy(invParentRot).mul(rotation);
                 }
-                this.dirtyLocal = true;
+
+                if (! this._dirtyLocal)
+                    this._dirtify(true);
             };
         }(),
 
@@ -923,7 +988,7 @@ pc.extend(pc, function () {
          * @function
          * @name pc.GraphNode#setEulerAngles
          * @description Sets the world space orientation of the specified graph node
-         * using Euler angles. Angles are specified in degress in XYZ order.
+         * using Euler angles. Angles are specified in degrees in XYZ order.
          * @param {Number} ex Rotation around world space X axis in degrees.
          * @param {Number} ey Rotation around world space Y axis in degrees.
          * @param {Number} ez Rotation around world space Z axis in degrees.
@@ -934,7 +999,7 @@ pc.extend(pc, function () {
          * @function
          * @name pc.GraphNode#setEulerAngles^2
          * @description Sets the world space orientation of the specified graph node
-         * using Euler angles. Angles are specified in degress in XYZ order.
+         * using Euler angles. Angles are specified in degrees in XYZ order.
          * @param {pc.Vec3} angles Euler angles in degrees (XYZ order).
          * @example
          * var angles = new pc.Vec3(0, 90, 0);
@@ -943,29 +1008,21 @@ pc.extend(pc, function () {
         setEulerAngles: function () {
             var invParentRot = new pc.Quat();
 
-            return function () {
-                var ex, ey, ez;
-                switch (arguments.length) {
-                    case 1:
-                        ex = arguments[0].x;
-                        ey = arguments[0].y;
-                        ez = arguments[0].z;
-                        break;
-                    case 3:
-                        ex = arguments[0];
-                        ey = arguments[1];
-                        ez = arguments[2];
-                        break;
+            return function (x, y, z) {
+                if (x instanceof pc.Vec3) {
+                    this.localRotation.setFromEulerAngles(x.data[0], x.data[1], x.data[2]);
+                } else {
+                    this.localRotation.setFromEulerAngles(x, y, z);
                 }
-
-                this.localRotation.setFromEulerAngles(ex, ey, ez);
 
                 if (this._parent !== null) {
                     var parentRot = this._parent.getRotation();
                     invParentRot.copy(parentRot).invert();
                     this.localRotation.mul2(invParentRot, this.localRotation);
                 }
-                this.dirtyLocal = true;
+
+                if (! this._dirtyLocal)
+                    this._dirtify(true);
             };
         }(),
 
@@ -1042,8 +1099,10 @@ pc.extend(pc, function () {
             }
 
             // The child (plus subhierarchy) will need world transforms to be recalculated
-            node.dirtyWorld = true;
-            node._dirtyAabb = true;
+            node._dirtify();
+
+            // alert an entity that it has been inserted
+            if (node.fire) node.fire('insert', this);
         },
 
         /**
@@ -1059,13 +1118,14 @@ pc.extend(pc, function () {
             var i;
             var length = this._children.length;
 
-            // Clear parent
-            child._parent = null;
-
             // Remove from child list
             for(i = 0; i < length; ++i) {
                 if(this._children[i] === child) {
                     this._children.splice(i, 1);
+
+                    // Clear parent
+                    child._parent = null;
+
                     return;
                 }
             }
@@ -1148,31 +1208,62 @@ pc.extend(pc, function () {
             return results;
         },
 
-        sync: function () {
-            if (this.dirtyLocal) {
+        _sync: function () {
+            if (this._dirtyLocal) {
                 this.localTransform.setTRS(this.localPosition, this.localRotation, this.localScale);
 
-                this.dirtyLocal = false;
-                this.dirtyWorld = true;
-                this._dirtyAabb = true;
+                this._dirtyLocal = false;
             }
 
-            if (this.dirtyWorld) {
+            if (this._dirtyWorld) {
                 if (this._parent === null) {
                     this.worldTransform.copy(this.localTransform);
                 } else {
-                    this.worldTransform.mul2(this._parent.worldTransform, this.localTransform);
+                    if (this.scaleCompensation) {
+                        var parentWorldScale;
+                        var parent = this._parent;
+
+                        // Find a parent of the first uncompensated node up in the hierarchy and use its scale * localScale
+                        var scale = this.localScale;
+                        var parentToUseScaleFrom = parent; // current parent
+                        if (parentToUseScaleFrom) {
+                            while(parentToUseScaleFrom && parentToUseScaleFrom.scaleCompensation) {
+                                parentToUseScaleFrom = parentToUseScaleFrom._parent;
+                            }
+                            // topmost node with scale compensation
+                            if (parentToUseScaleFrom) {
+                                parentToUseScaleFrom = parentToUseScaleFrom._parent; // node without scale compensation
+                                if (parentToUseScaleFrom) {
+                                    parentWorldScale = parentToUseScaleFrom.worldTransform.getScale();
+                                    scaleCompensateScale.mul2(parentWorldScale, this.localScale);
+                                    scale = scaleCompensateScale;
+                                }
+                            }
+                        }
+
+                        // Rotation is as usual
+                        scaleCompensateRot2.setFromMat4(parent.worldTransform);
+                        scaleCompensateRot.mul2(scaleCompensateRot2, this.localRotation);
+
+                        // Find matrix to transform position
+                        var tmatrix = parent.worldTransform;
+                        if (parent.scaleCompensation) {
+                            scaleCompensateScaleForParent.mul2(parentWorldScale, parent.getLocalScale());
+                            scaleCompensatePosTransform.setTRS(parent.worldTransform.getTranslation(scaleCompensatePos),
+                                                               scaleCompensateRot2,
+                                                               scaleCompensateScaleForParent);
+                            tmatrix = scaleCompensatePosTransform;
+                        }
+                        tmatrix.transformPoint(this.localPosition, scaleCompensatePos);
+
+                        this.worldTransform.setTRS(scaleCompensatePos, scaleCompensateRot, scale);
+
+                    } else {
+                        this.worldTransform.mul2(this._parent.worldTransform, this.localTransform);
+                    }
                 }
 
-                this.dirtyWorld = false;
-                var child;
-
-                for (var i = 0, len = this._children.length; i < len; i++) {
-                    child = this._children[i];
-                    child.dirtyWorld = true;
-                    child._dirtyAabb = true;
-
-                }
+                this._dirtyWorld = false;
             }
         },
 
@@ -1181,25 +1272,16 @@ pc.extend(pc, function () {
          * @name pc.GraphNode#syncHierarchy
          * @description Updates the world transformation matrices at this node and all of its descendants.
          */
-        syncHierarchy: (function () {
-            // cache this._children and the syncHierarchy method itself
-            // for optimization purposes
-            var F = function () {
-                if (!this._enabled) {
-                    return;
-                }
+        syncHierarchy: function () {
+            if (! this._enabled)
+                return;
 
-                // sync this object
-                this.sync();
+            if (this._dirtyLocal || this._dirtyWorld)
+                this._sync();
 
-                // sync the children
-                var c = this._children;
-                for(var i = 0, len = c.length;i < len;i++) {
-                    F.call(c[i]);
-                }
-            };
-           return F;
-       })(),
+            for(var i = 0; i < this._children.length; i++)
+                this._children[i].syncHierarchy();
+        },
 
         /**
          * @function
@@ -1242,24 +1324,25 @@ pc.extend(pc, function () {
             var up = new pc.Vec3();
             var rotation = new pc.Quat();
 
-            return function () {
-                switch (arguments.length) {
-                    case 1:
-                        target.copy(arguments[0]);
+            return function (tx, ty, tz, ux, uy, uz) {
+                if (tx instanceof pc.Vec3) {
+                    target.copy(tx);
+
+                    if (ty instanceof pc.Vec3) { // vec3, vec3
+                        up.copy(ty);
+                    } else { // vec3
                         up.copy(pc.Vec3.UP);
-                        break;
-                    case 2:
-                        target.copy(arguments[0]);
-                        up.copy(arguments[1]);
-                        break;
-                    case 3:
-                        target.set(arguments[0], arguments[1], arguments[2]);
+                    }
+                } else if (tz === undefined) {
+                    return;
+                } else {
+                    target.set(tx, ty, tz);
+
+                    if (ux !== undefined) { // number, number, number, number, number, number
+                        up.set(ux, uy, uz);
+                    } else { // number, number, number
                         up.copy(pc.Vec3.UP);
-                        break;
-                    case 6:
-                        target.set(arguments[0], arguments[1], arguments[2]);
-                        up.set(arguments[3], arguments[4], arguments[5]);
-                        break;
+                    }
                 }
 
                 matrix.setLookAt(this.getPosition(), target, up);
@@ -1290,14 +1373,11 @@ pc.extend(pc, function () {
         translate: function () {
             var translation = new pc.Vec3();
 
-            return function () {
-                switch (arguments.length) {
-                    case 1:
-                        translation.copy(arguments[0]);
-                        break;
-                    case 3:
-                        translation.set(arguments[0], arguments[1], arguments[2]);
-                        break;
+            return function (x, y, z) {
+                if (x instanceof pc.Vec3) {
+                    translation.copy(x);
+                } else {
+                    translation.set(x, y, z);
                 }
 
                 translation.add(this.getPosition());
@@ -1327,19 +1407,18 @@ pc.extend(pc, function () {
         translateLocal: function () {
             var translation = new pc.Vec3();
 
-            return function () {
-                switch (arguments.length) {
-                    case 1:
-                        translation.copy(arguments[0]);
-                        break;
-                    case 3:
-                        translation.set(arguments[0], arguments[1], arguments[2]);
-                        break;
+            return function (x, y, z) {
+                if (x instanceof pc.Vec3) {
+                    translation.copy(x);
+                } else {
+                    translation.set(x, y, z);
                 }
 
                 this.localRotation.transformVector(translation, translation);
                 this.localPosition.add(translation);
-                this.dirtyLocal = true;
+
+                if (! this._dirtyLocal)
+                    this._dirtify(true);
             };
         }(),
 
@@ -1368,22 +1447,12 @@ pc.extend(pc, function () {
             var quaternion = new pc.Quat();
             var invParentRot = new pc.Quat();
 
-            return function () {
-                var ex, ey, ez;
-                switch (arguments.length) {
-                    case 1:
-                        ex = arguments[0].x;
-                        ey = arguments[0].y;
-                        ez = arguments[0].z;
-                        break;
-                    case 3:
-                        ex = arguments[0];
-                        ey = arguments[1];
-                        ez = arguments[2];
-                        break;
+            return function (x, y, z) {
+                if (x instanceof pc.Vec3) {
+                    quaternion.setFromEulerAngles(x.data[0], x.data[1], x.data[2]);
+                } else {
+                    quaternion.setFromEulerAngles(x, y, z);
                 }
-
-                quaternion.setFromEulerAngles(ex, ey, ez);
 
                 if (this._parent === null) {
                     this.localRotation.mul2(quaternion, this.localRotation);
@@ -1396,7 +1465,8 @@ pc.extend(pc, function () {
                     this.localRotation.mul2(quaternion, rot);
                 }
 
-                this.dirtyLocal = true;
+                if (! this._dirtyLocal)
+                    this._dirtify(true);
             };
         }(),
 
@@ -1424,25 +1494,17 @@ pc.extend(pc, function () {
         rotateLocal: function () {
             var quaternion = new pc.Quat();
 
-            return function () {
-                var ex, ey, ez;
-                switch (arguments.length) {
-                    case 1:
-                        ex = arguments[0].x;
-                        ey = arguments[0].y;
-                        ez = arguments[0].z;
-                        break;
-                    case 3:
-                        ex = arguments[0];
-                        ey = arguments[1];
-                        ez = arguments[2];
-                        break;
+            return function (x, y, z) {
+                if (x instanceof pc.Vec3) {
+                    quaternion.setFromEulerAngles(x.data[0], x.data[1], x.data[2]);
+                } else {
+                    quaternion.setFromEulerAngles(x, y, z);
                 }
 
-                quaternion.setFromEulerAngles(ex, ey, ez);
-
                 this.localRotation.mul(quaternion);
-                this.dirtyLocal = true;
+
+                if (! this._dirtyLocal)
+                    this._dirtify(true);
             };
         }(),
     });

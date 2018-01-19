@@ -5,7 +5,7 @@ pc.extend(pc, (function () {
         // https://code.google.com/p/chromium/issues/detail?id=447419
         // Workaround: wait a little
         var endTime = Date.now() + 10;
-        while(Date.now() < endTime) {};
+        while (Date.now() < endTime) {}
     }
 
     function syncToCpu(device, targ, face) {
@@ -13,7 +13,7 @@ pc.extend(pc, (function () {
         if (tex.format!=pc.PIXELFORMAT_R8_G8_B8_A8) return;
         var pixels = new Uint8Array(tex.width * tex.height * 4);
         var gl = device.gl;
-        gl.bindFramebuffer(gl.FRAMEBUFFER, targ._glFrameBuffer);
+        device.setFramebuffer(targ._glFrameBuffer);
         gl.readPixels(0, 0, tex.width, tex.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
         if (!tex._levels) tex._levels = [];
         if (!tex._levels[0]) tex._levels[0] = [];
@@ -70,12 +70,8 @@ pc.extend(pc, (function () {
                 format: format,
                 width: size,
                 height: size,
-                autoMipmap: false
+                mipmaps: false
             });
-            nextCubemap.minFilter = pc.FILTER_LINEAR;
-            nextCubemap.magFilter = pc.FILTER_LINEAR;
-            nextCubemap.addressU = pc.ADDRESS_CLAMP_TO_EDGE;
-            nextCubemap.addressV = pc.ADDRESS_CLAMP_TO_EDGE;
             for(face=0; face<6; face++) {
                 targ = new pc.RenderTarget(device, nextCubemap, {
                     face: face,
@@ -107,12 +103,8 @@ pc.extend(pc, (function () {
                     format: format,
                     width: size,
                     height: size,
-                    autoMipmap: false
+                    mipmaps: false
                 });
-                nextCubemap.minFilter = pc.FILTER_LINEAR;
-                nextCubemap.magFilter = pc.FILTER_LINEAR;
-                nextCubemap.addressU = pc.ADDRESS_CLAMP_TO_EDGE;
-                nextCubemap.addressV = pc.ADDRESS_CLAMP_TO_EDGE;
                 for(face=0; face<6; face++) {
                     targ = new pc.RenderTarget(device, nextCubemap, {
                         face: face,
@@ -144,12 +136,8 @@ pc.extend(pc, (function () {
                 format: pc.PIXELFORMAT_R8_G8_B8_A8,
                 width: size,
                 height: size,
-                autoMipmap: false
+                mipmaps: false
             });
-            nextCubemap.minFilter = pc.FILTER_LINEAR;
-            nextCubemap.magFilter = pc.FILTER_LINEAR;
-            nextCubemap.addressU = pc.ADDRESS_CLAMP_TO_EDGE;
-            nextCubemap.addressV = pc.ADDRESS_CLAMP_TO_EDGE;
             for(face=0; face<6; face++) {
                 targ = new pc.RenderTarget(device, nextCubemap, {
                     face: face,
@@ -182,12 +170,8 @@ pc.extend(pc, (function () {
                         fixCubemapSeams: pass===1 || pass===3,
                         width: mipSize[i],
                         height: mipSize[i],
-                        autoMipmap: false
+                        mipmaps: false
                     });
-                    cmapsList[pass][i].minFilter = pc.FILTER_LINEAR;
-                    cmapsList[pass][i].magFilter = pc.FILTER_LINEAR;
-                    cmapsList[pass][i].addressU = pc.ADDRESS_CLAMP_TO_EDGE;
-                    cmapsList[pass][i].addressV = pc.ADDRESS_CLAMP_TO_EDGE;
                 }
             }
         }
@@ -247,16 +231,13 @@ pc.extend(pc, (function () {
                 format: format,
                 width: 128,
                 height: 128,
-                autoMipmap: false
+                addressU: pc.ADDRESS_CLAMP_TO_EDGE,
+                addressV: pc.ADDRESS_CLAMP_TO_EDGE
             });
-            for(i=0; i<6; i++) {
+            for(i=0; i<6; i++)
                 cubemap._levels[i] = mips[i]._levels[0];
-            }
-            cubemap.addressU = pc.ADDRESS_CLAMP_TO_EDGE;
-            cubemap.addressV = pc.ADDRESS_CLAMP_TO_EDGE;
+
             cubemap.upload();
-            cubemap.minFilter = pc.FILTER_LINEAR_MIPMAP_LINEAR;
-            cubemap.magFilter = pc.FILTER_LINEAR;
             cubemap._prefilteredMips = true;
             options.singleFilteredFixed = cubemap;
         }
@@ -278,16 +259,13 @@ pc.extend(pc, (function () {
                 format: pc.PIXELFORMAT_R8_G8_B8_A8,
                 width: 128,
                 height: 128,
-                autoMipmap: false
+                addressU: pc.ADDRESS_CLAMP_TO_EDGE,
+                addressV: pc.ADDRESS_CLAMP_TO_EDGE
             });
             for(i=0; i<6; i++) {
                 cubemap._levels[i] = mips[i]._levels[0];
             }
-            cubemap.addressU = pc.ADDRESS_CLAMP_TO_EDGE;
-            cubemap.addressV = pc.ADDRESS_CLAMP_TO_EDGE;
             cubemap.upload();
-            cubemap.minFilter = pc.FILTER_LINEAR_MIPMAP_LINEAR;
-            cubemap.magFilter = pc.FILTER_LINEAR;
             cubemap._prefilteredMips = true;
             options.singleFilteredFixedRgbm = cubemap;
         }
@@ -298,15 +276,15 @@ pc.extend(pc, (function () {
         return Math.atan2(x * y, Math.sqrt(x * x + y * y + 1));
     }
     function texelCoordSolidAngle(u, v, size) {
-       //scale up to [-1, 1] range (inclusive), offset by 0.5 to point to texel center.
-       var _u = (2.0 * (u + 0.5) / size ) - 1.0;
-       var _v = (2.0 * (v + 0.5) / size ) - 1.0;
+        //scale up to [-1, 1] range (inclusive), offset by 0.5 to point to texel center.
+        var _u = (2.0 * (u + 0.5) / size ) - 1.0;
+        var _v = (2.0 * (v + 0.5) / size ) - 1.0;
 
-       // fixSeams
+        // fixSeams
         _u *= 1.0 - 1.0 / size;
         _v *= 1.0 - 1.0 / size;
 
-       var invResolution = 1.0 / size;
+        var invResolution = 1.0 / size;
 
         // U and V are the -1..1 texture coordinate on the current face.
         // Get projected area for this texel
@@ -352,33 +330,25 @@ pc.extend(pc, (function () {
                 for(face=0; face<6; face++) {
                     var img = source._levels[0][face];
 
-                    var tex = new pc.gfx.Texture(device, {
+                    var tex = new pc.Texture(device, {
                         cubemap: false,
                         rgbm: false,
                         format: source.format,
                         width: cubeSize,
                         height: cubeSize,
-                        autoMipmap: false
+                        mipmaps: false
                     });
-                    tex.minFilter = pc.FILTER_NEAREST;
-                    tex.magFilter = pc.FILTER_NEAREST;
-                    tex.addressU = pc.ADDRESS_CLAMP_TO_EDGE;
-                    tex.addressV = pc.ADDRESS_CLAMP_TO_EDGE;
                     tex._levels[0] = img;
                     tex.upload();
 
-                    var tex2 = new pc.gfx.Texture(device, {
+                    var tex2 = new pc.Texture(device, {
                         cubemap: false,
                         rgbm: false,
                         format: source.format,
                         width: cubeSize,
                         height: cubeSize,
-                        autoMipmap: false
+                        mipmaps: false
                     });
-                    tex2.minFilter = pc.FILTER_NEAREST;
-                    tex2.magFilter = pc.FILTER_NEAREST;
-                    tex2.addressU = pc.ADDRESS_CLAMP_TO_EDGE;
-                    tex2.addressV = pc.ADDRESS_CLAMP_TO_EDGE;
 
                     var targ = new pc.RenderTarget(device, tex2, {
                         depth: false
@@ -514,4 +484,3 @@ pc.extend(pc, (function () {
         shFromCubemap: shFromCubemap
     };
 }()));
-

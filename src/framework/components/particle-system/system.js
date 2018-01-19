@@ -1,6 +1,57 @@
 pc.extend(pc, function() {
+    var _schema = [
+        'enabled',
+        'autoPlay',
+        'numParticles',
+        'lifetime',
+        'rate',
+        'rate2',
+        'startAngle',
+        'startAngle2',
+        'loop',
+        'preWarm',
+        'lighting',
+        'halfLambert',
+        'intensity',
+        'depthWrite',
+        'noFog',
+        'depthSoftening',
+        'sort',
+        'blendType',
+        'stretch',
+        'alignToMotion',
+        'emitterShape',
+        'emitterExtents',
+        'emitterRadius',
+        'initialVelocity',
+        'wrap',
+        'wrapBounds',
+        'localSpace',
+        'colorMapAsset',
+        'normalMapAsset',
+        'mesh',
+        'localVelocityGraph',
+        'localVelocityGraph2',
+        'velocityGraph',
+        'velocityGraph2',
+        'rotationSpeedGraph',
+        'rotationSpeedGraph2',
+        'scaleGraph',
+        'scaleGraph2',
+        'colorGraph',
+        'colorGraph2',
+        'alphaGraph',
+        'alphaGraph2',
+        'colorMap',
+        'normalMap',
+        'animTilesX',
+        'animTilesY',
+        'animNumFrames',
+        'animSpeed',
+        'animLoop'
+    ];
 
-   /**
+    /**
      * @name pc.ParticleSystemComponentSystem
      * @description Create a new ParticleSystemComponentSystem
      * @class Allows an Entity to render a particle system
@@ -15,56 +66,7 @@ pc.extend(pc, function() {
         this.ComponentType = pc.ParticleSystemComponent;
         this.DataType = pc.ParticleSystemComponentData;
 
-        this.schema = [
-            'enabled',
-            'autoPlay',
-            'numParticles',
-            'lifetime',
-            'rate',
-            'rate2',
-            'startAngle',
-            'startAngle2',
-            'loop',
-            'preWarm',
-            'lighting',
-            'halfLambert',
-            'intensity',
-            'depthWrite',
-            'noFog',
-            'depthSoftening',
-            'sort',
-            'blendType',
-            'stretch',
-            'alignToMotion',
-            'emitterShape',
-            'emitterExtents',
-            'emitterRadius',
-            'initialVelocity',
-            'wrap',
-            'wrapBounds',
-            'colorMapAsset',
-            'normalMapAsset',
-            'mesh',
-            'localVelocityGraph',
-            'localVelocityGraph2',
-            'velocityGraph',
-            'velocityGraph2',
-            'rotationSpeedGraph',
-            'rotationSpeedGraph2',
-            'scaleGraph',
-            'scaleGraph2',
-            'colorGraph',
-            'colorGraph2',
-            'alphaGraph',
-            'alphaGraph2',
-            'colorMap',
-            'normalMap',
-            'animTilesX',
-            'animTilesY',
-            'animNumFrames',
-            'animSpeed',
-            'animLoop'
-        ];
+        this.schema = _schema;
 
         this.propertyTypes = {
             emitterExtents: 'vec3',
@@ -83,10 +85,12 @@ pc.extend(pc, function() {
             scaleGraph2: 'curve'
         };
 
-        this.on('remove', this.onRemove, this);
+        this.on('beforeremove', this.onRemove, this);
         pc.ComponentSystem.on('update', this.onUpdate, this);
     };
     ParticleSystemComponentSystem = pc.inherits(ParticleSystemComponentSystem, pc.ComponentSystem);
+
+    pc.Component._buildAccessors(pc.ParticleSystemComponent.prototype, _schema);
 
     pc.extend(ParticleSystemComponentSystem.prototype, {
 
@@ -168,7 +172,6 @@ pc.extend(pc, function() {
                         if (!emitter.meshInstance.visible) continue;
 
                         if (!data.paused) {
-
                             emitter.simTime += dt;
                             numSteps = 0;
                             if (emitter.simTime > emitter.fixedTimeStep) {
@@ -192,11 +195,17 @@ pc.extend(pc, function() {
             }
         },
 
-        onRemove: function(entity, data) {
+        onRemove: function(entity, component) {
+            var data = component.data;
             if (data.model) {
                 this.app.scene.removeModel(data.model);
                 entity.removeChild(data.model.getGraph());
                 data.model = null;
+            }
+
+            if (component.emitter) {
+                component.emitter.destroy();
+                component.emitter = null;
             }
         }
     });

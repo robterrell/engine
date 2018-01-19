@@ -18,7 +18,7 @@ pc.extend(pc, function () {
                 assetCubeMap.resources[0] = new pc.Texture(this._device, {
                     format : pc.PIXELFORMAT_R8_G8_B8_A8,
                     cubemap: true,
-                    autoMipmap: true,
+                    mipmaps: true,
                     fixCubemapSeams: !! assetCubeMap._dds
                 });
 
@@ -28,7 +28,9 @@ pc.extend(pc, function () {
             if (! assetCubeMap.file) {
                 delete assetCubeMap._dds;
             } else if (assetCubeMap.file && ! assetCubeMap._dds) {
-                assets._loader.load(assetCubeMap.file.url + '?t=' + assetCubeMap.file.hash, 'texture', function (err, texture) {
+                var url = assetCubeMap.getFileUrl();
+
+                assets._loader.load(url + '?t=' + assetCubeMap.file.hash, 'texture', function (err, texture) {
                     if (! err) {
                         assets._loader.patch({
                             resource: texture,
@@ -57,26 +59,27 @@ pc.extend(pc, function () {
 
                 // set prefiltered textures
                 assetCubeMap._dds.fixCubemapSeams = true;
-                assetCubeMap._dds.autoMipmap = this._device.useTexCubeLod ? false : true;
-                assetCubeMap._dds.minFilter = this._device.useTexCubeLod ? pc.FILTER_LINEAR_MIPMAP_LINEAR : pc.FILTER_LINEAR;
-                assetCubeMap._dds.magFilter = pc.FILTER_LINEAR;
                 assetCubeMap._dds.addressU = pc.ADDRESS_CLAMP_TO_EDGE;
                 assetCubeMap._dds.addressV = pc.ADDRESS_CLAMP_TO_EDGE;
-                assetCubeMap.resources.push(assetCubeMap._dds);
 
-                for (var i = 1; i < 6; i++) {
+                var startIndex = 0;
+                if (this._device.useTexCubeLod) {
+                    // full PMREM mipchain is added for ios
+                    assetCubeMap.resources.push(assetCubeMap._dds);
+                    startIndex = 1;
+                }
+                
+                for (var i = startIndex; i < 6; i++) {
                     // create a cubemap for each mip in the prefiltered cubemap
-                    var mip = new pc.gfx.Texture(this._device, {
+                    var mip = new pc.Texture(this._device, {
                         cubemap: true,
                         fixCubemapSeams: true,
-                        autoMipmap: true,
+                        mipmaps: true,
                         format: assetCubeMap._dds.format,
                         rgbm: assetCubeMap._dds.rgbm,
                         width: Math.pow(2, 7 - i),
                         height: Math.pow(2, 7 - i)
                     });
-                    mip.addressU = pc.ADDRESS_CLAMP_TO_EDGE;
-                    mip.addressV = pc.ADDRESS_CLAMP_TO_EDGE;
 
                     mip._levels[0] = assetCubeMap._dds._levels[i];
                     mip.upload();
@@ -91,8 +94,9 @@ pc.extend(pc, function () {
             if (cubemap.name !== assetCubeMap.name)
                 cubemap.name = assetCubeMap.name;
 
-            if (assetCubeMap.data.hasOwnProperty('rgbm') && cubemap.rgbm !== !! assetCubeMap.data.rgbm)
-                cubemap.rgbm = !! assetCubeMap.data.rgbm;
+            var rgbm = !!assetCubeMap.data.rgbm;
+            if (assetCubeMap.data.hasOwnProperty('rgbm') && cubemap.rgbm !== rgbm)
+                cubemap.rgbm = rgbm;
 
             cubemap.fixCubemapSeams = !! assetCubeMap._dds;
 
@@ -139,6 +143,11 @@ pc.extend(pc, function () {
                 assetCubeMap._levelsEvents = [ null, null, null, null, null, null ];
 
             assetCubeMap.data.textures.forEach(function (id, index) {
+                var assetAdded = function(asset) {
+                    asset.ready(assetReady);
+                    assets.load(asset);
+                };
+
                 var assetReady = function(asset) {
                     count++;
                     sources[index] = asset && asset.resource.getSource() || null;
@@ -169,12 +178,13 @@ pc.extend(pc, function () {
                     }
                 };
 
-                var asset = assets.get(assetCubeMap.data.textures[index]);
+                var asset = assets.get(id);
                 if (asset) {
                     asset.ready(assetReady);
                     assets.load(asset);
                 } else if (id) {
                     assets.once("load:" + id, assetReady);
+                    assets.once("add:" + id, assetAdded);
                 } else {
                     assetReady(null);
                 }

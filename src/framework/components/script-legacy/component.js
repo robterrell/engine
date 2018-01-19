@@ -109,7 +109,7 @@ pc.extend(pc, function () {
             var i, len;
             var cached = [];
 
-            var prefix = this.system._prefix || "";
+            var prefix = this.system.app._scriptPrefix || "";
             var regex = /^http(s)?:\/\//i;
 
             for (i = 0, len = urls.length; i < len; i++) {
@@ -137,10 +137,10 @@ pc.extend(pc, function () {
                     continue;
                 }
 
-                // ScriptType may be null if the script component is loading an ordinary javascript lib rather than a PlayCanvas script
+                // ScriptType may be null if the script component is loading an ordinary JavaScript lib rather than a PlayCanvas script
                 // Make sure that script component hasn't been removed since we started loading
                 if (ScriptType && this.entity.script) {
-                    // Make sure that we haven't already instanciated another identical script while loading
+                    // Make sure that we haven't already instantiated another identical script while loading
                     // e.g. if you do addComponent, removeComponent, addComponent, in quick succession
                     if (!this.entity.script.instances[ScriptType._pcScriptName]) {
                         var instance = new ScriptType(this.entity);
@@ -153,7 +153,7 @@ pc.extend(pc, function () {
                 this.data.areScriptsLoaded = true;
             }
 
-            // We only need to initalize after preloading is complete
+            // We only need to initialize after preloading is complete
             // During preloading all scripts are initialized after everything is loaded
             if (!this.system.preloading) {
                 this.system.onInitialize(this.entity);
@@ -166,7 +166,7 @@ pc.extend(pc, function () {
         _loadScripts: function (urls) {
             var count = urls.length;
 
-            var prefix = this.system._prefix || "";
+            var prefix = this.system.app._scriptPrefix || "";
 
             urls.forEach(function (url) {
                 var _url = null;
@@ -195,7 +195,7 @@ pc.extend(pc, function () {
                     if (count === 0) {
                         this.data.areScriptsLoaded = true;
 
-                        // We only need to initalize after preloading is complete
+                        // We only need to initialize after preloading is complete
                         // During preloading all scripts are initialized after everything is loaded
                         if (!this.system.preloading) {
                             this.system.onInitialize(this.entity);

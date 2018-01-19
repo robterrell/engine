@@ -35,7 +35,7 @@ pc.extend(pc, function () {
         this._assets = assets;
         this._loader = loader;
 
-        // by default don't try cross-origin, because some browsers send different cookes (e.g. safari) if this is set.
+        // by default don't try cross-origin, because some browsers send different cookies (e.g. safari) if this is set.
         this.crossOrigin = undefined;
         if (assets.prefix) {
             // ensure we send cookies if we load images.
@@ -46,6 +46,7 @@ pc.extend(pc, function () {
     TextureHandler.prototype = {
         load: function (url, callback) {
             var self = this;
+            var image;
 
             var urlWithoutParams = url.indexOf('?') >= 0 ? url.split('?')[0] : url;
 
@@ -60,12 +61,13 @@ pc.extend(pc, function () {
                     if (!err) {
                         callback(null, response);
                     } else {
-                        callback(err)
+                        callback(err);
                     }
                 });
             } else if ((ext === '.jpg') || (ext === '.jpeg') || (ext === '.gif') || (ext === '.png')) {
-                var image = new Image();
-                if (self.crossOrigin !== undefined) {
+                image = new Image();
+                // only apply cross-origin setting if this is an absolute URL, relative URLs can never be cross-origin
+                if (self.crossOrigin !== undefined && pc.ABSOLUTE_URL.test(url)) {
                     image.crossOrigin = self.crossOrigin;
                 }
 
@@ -81,12 +83,32 @@ pc.extend(pc, function () {
 
                 image.src = url;
             } else {
-                // Unsupported texture extension
-                // Use timeout because asset events can be hooked up after load gets called in some
-                // cases. For example, material loads a texture on 'add' event.
-                setTimeout(function () {
-                    callback(pc.string.format("Error loading Texture: format not supported: '{0}'", ext));
-                }, 0);
+                var blobStart = urlWithoutParams.indexOf("blob:");
+                if (blobStart >= 0) {
+                    urlWithoutParams = urlWithoutParams.substr(blobStart);
+                    url = urlWithoutParams;
+
+                    image = new Image();
+
+                    // Call success callback after opening Texture
+                    image.onload = function () {
+                        callback(null, image);
+                    };
+
+                    // Call error callback with details.
+                    image.onerror = function (event) {
+                        callback(pc.string.format("Error loading Texture from: '{0}'", url));
+                    };
+
+                    image.src = url;
+                } else {
+                    // Unsupported texture extension
+                    // Use timeout because asset events can be hooked up after load gets called in some
+                    // cases. For example, material loads a texture on 'add' event.
+                    setTimeout(function () {
+                        callback(pc.string.format("Error loading Texture: format not supported: '{0}'", ext));
+                    }, 0);
+                }
             }
         },
 
@@ -107,6 +129,9 @@ pc.extend(pc, function () {
 
                 format = (ext === ".jpg" || ext === ".jpeg") ? pc.PIXELFORMAT_R8_G8_B8 : pc.PIXELFORMAT_R8_G8_B8_A8;
                 texture = new pc.Texture(this._device, {
+                    // #ifdef PROFILER
+                    profilerHint: pc.TEXHINT_ASSET,
+                    // #endif
                     width: img.width,
                     height: img.height,
                     format: format
@@ -184,15 +209,10 @@ pc.extend(pc, function () {
                     }
                 }
 
-                var requiredMips = Math.round(Math.log2(Math.max(width, height)) + 1);
-                var cantLoad = !format || (mips !== requiredMips && compressed);
-                if (cantLoad) {
-                    var errEnd = ". Empty texture will be created instead.";
-                    if (!format) {
-                        console.error("This DDS pixel format is currently unsupported" + errEnd);
-                    } else {
-                        console.error("DDS has " + mips + " mips, but engine requires " + requiredMips + " for DXT format. " + errEnd);
-                    }
+                if (! format) {
+                    // #ifdef DEBUG
+                    console.error("This DDS pixel format is currently unsupported. Empty texture will be created instead.");
+                    // #endif
                     texture = new pc.Texture(this._device, {
                         width: 4,
                         height: 4,
@@ -202,6 +222,9 @@ pc.extend(pc, function () {
                 }
 
                 var texOptions = {
+                    // #ifdef PROFILER
+                    profilerHint: pc.TEXHINT_ASSET,
+                    // #endif
                     width: width,
                     height: height,
                     format: format,
@@ -280,11 +303,15 @@ pc.extend(pc, function () {
             if (asset.data.hasOwnProperty('addressv') && texture.addressV !== JSON_ADDRESS_MODE[asset.data.addressv])
                 texture.addressV = JSON_ADDRESS_MODE[asset.data.addressv];
 
+            if (asset.data.hasOwnProperty('mipmaps') && texture.mipmaps !== asset.data.mipmaps)
+                texture.mipmaps = asset.data.mipmaps;
+
             if (asset.data.hasOwnProperty('anisotropy') && texture.anisotropy !== asset.data.anisotropy)
                 texture.anisotropy = asset.data.anisotropy;
 
-            if (asset.data.hasOwnProperty('rgbm') && texture.rgbm !== !! asset.data.rgbm)
-                texture.rgbm = !! asset.data.rgbm;
+            var rgbm = !!asset.data.rgbm;
+            if (asset.data.hasOwnProperty('rgbm') && texture.rgbm !== rgbm)
+                texture.rgbm = rgbm;
         }
     };
 

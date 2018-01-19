@@ -1,11 +1,12 @@
 pc.extend(pc, function () {
     var rawToValue = function(app, args, value, old) {
+        var i;
+
         // TODO scripts2
         // arrays
         switch(args.type) {
             case 'boolean':
                 return !! value;
-                break;
             case 'number':
                 if (typeof(value) === 'number') {
                     return value;
@@ -35,7 +36,7 @@ pc.extend(pc, function () {
                     var result = [ ];
 
                     if (value instanceof Array) {
-                        for(var i = 0; i < value.length; i++) {
+                        for(i = 0; i < value.length; i++) {
                             if (value[i] instanceof pc.Asset) {
                                 result.push(value[i]);
                             } else if (typeof(value[i]) === 'number') {
@@ -77,16 +78,16 @@ pc.extend(pc, function () {
                         old.copy(value);
                         return old;
                     } else {
-                        return value;
+                        return value.clone();
                     }
                 } else if (value instanceof Array && value.length >= 3 && value.length <= 4) {
-                    for(var i = 0; i < value.length; i++) {
+                    for(i = 0; i < value.length; i++) {
                         if (typeof(value[i]) !== 'number')
                             return null;
                     }
                     if (! old) old = new pc.Color();
 
-                    for(var i = 0; i < 4; i++)
+                    for(i = 0; i < 4; i++)
                         old.data[i] = (i === 4 && value.length === 3) ? 1 : value[i];
 
                     return old;
@@ -110,16 +111,16 @@ pc.extend(pc, function () {
                         old.copy(value);
                         return old;
                     } else {
-                        return value;
+                        return value.clone();
                     }
                 } else if (value instanceof Array && value.length === len) {
-                    for(var i = 0; i < value.length; i++) {
+                    for(i = 0; i < value.length; i++) {
                         if (typeof(value[i]) !== 'number')
                             return null;
                     }
-                    if (! old) old = new pc['Vec' + len];
+                    if (! old) old = new pc['Vec' + len]();
 
-                    for(var i = 0; i < len; i++)
+                    for(i = 0; i < len; i++)
                         old.data[i] = value[i];
 
                     return old;
@@ -129,8 +130,14 @@ pc.extend(pc, function () {
                 break;
             case 'curve':
                 if (value) {
-                    var CurveType = value.keys[0] instanceof Array ? pc.CurveSet : pc.Curve;
-                    var curve = new CurveType(value.keys);
+                    var curve;
+                    if (value instanceof pc.Curve || value instanceof pc.CurveSet) {
+                        curve = value.clone();
+                    } else {
+                        var CurveType = value.keys[0] instanceof Array ? pc.CurveSet : pc.Curve;
+                        curve = new CurveType(value.keys);
+                        curve.type = value.type;
+                    }
                     return curve;
                 }
                 break;
@@ -170,7 +177,7 @@ pc.extend(pc, function () {
      * @param {Number} [args.max] Maximum value for type 'number', if max and min defined, slider will be rendered in Editor's UI
      * @param {Number} [args.precision] Level of precision for field type 'number' with floating values
      * @param {String} [args.assetType] Name of asset type to be used in 'asset' type attribute picker in Editor's UI, defaults to '*' (all)
-     * @param {Strings[]} [args.curves] List of names for Curves for field type 'curve'
+     * @param {String[]} [args.curves] List of names for Curves for field type 'curve'
      * @param {String} [args.color] String of color channels for Curves for field type 'curve', can be any combination of `rgba` characters.
      * Defining this property will render Gradient in Editor's field UI
      * @param {Object[]} [args.enum] List of fixed choices for field, defined as array of objects, where key in object is a title of an option
@@ -304,6 +311,11 @@ pc.extend(pc, function () {
     * };
     */
     var createScript = function(name, app) {
+        if (pc.script.legacy) {
+            console.error("This project is using the legacy script system. You cannot call pc.createScript(). See: http://developer.playcanvas.com/en/user-manual/scripting/legacy/");
+            return null;
+        }
+
         if (createScript.reservedScripts[name])
             throw new Error('script name: \'' + name + '\' is reserved, please change script name');
 
@@ -368,18 +380,20 @@ pc.extend(pc, function () {
         script.attributes = new ScriptAttributes(script);
 
         // initialize attributes
-        script.prototype.__initializeAttributes = function() {
-            if (! this.__attributesRaw)
+        script.prototype.__initializeAttributes = function(force) {
+            if (! force && ! this.__attributesRaw)
                 return;
 
             // set attributes values
             for(var key in script.attributes.index) {
                 if (this.__attributesRaw && this.__attributesRaw.hasOwnProperty(key)) {
                     this[key] = this.__attributesRaw[key];
-                } else if (script.attributes.index[key].hasOwnProperty('default')) {
-                    this[key] = script.attributes.index[key].default;
-                } else {
-                    this[key] = null;
+                } else if (! this.__attributes.hasOwnProperty(key)) {
+                    if (script.attributes.index[key].hasOwnProperty('default')) {
+                        this[key] = script.attributes.index[key].default;
+                    } else {
+                        this[key] = null;
+                    }
                 }
             }
 
@@ -513,8 +527,9 @@ pc.extend(pc, function () {
                 return this._enabled && this.entity.script.enabled && this.entity.enabled;
             },
             set: function(value) {
-                if (this._enabled !== !! value)
-                    this._enabled = !! value;
+                value = !!value;
+                if (this._enabled !== value)
+                    this._enabled = value;
 
                 if (this.enabled !== this._enabledOld) {
                     this._enabledOld = this.enabled;
@@ -544,7 +559,8 @@ pc.extend(pc, function () {
         '_callbacks', 'has', 'on', 'off', 'fire', 'once', 'hasEvent'
     ];
     var reservedScripts = { };
-    for(var i = 0; i < createScript.reservedScripts.length; i++)
+    var i;
+    for (i = 0; i < createScript.reservedScripts.length; i++)
         reservedScripts[createScript.reservedScripts[i]] = 1;
     createScript.reservedScripts = reservedScripts;
 
@@ -556,7 +572,7 @@ pc.extend(pc, function () {
         '_callbacks', 'has', 'on', 'off', 'fire', 'once', 'hasEvent'
     ];
     var reservedAttributes = { };
-    for(var i = 0; i < createScript.reservedAttributes.length; i++)
+    for (i = 0; i < createScript.reservedAttributes.length; i++)
         reservedAttributes[createScript.reservedAttributes[i]] = 1;
     createScript.reservedAttributes = reservedAttributes;
 

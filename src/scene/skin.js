@@ -37,7 +37,7 @@ pc.extend(pc, function () {
 
         var device = skin.device;
         if (device.supportsBoneTextures) {
-            // Caculate a square texture dimension to hold bone matrices
+            // Calculate a square texture dimension to hold bone matrices
             // where a matrix takes up 4 texels:
             //   RGBA (Row 1), RGBA (Row 2), RGBA (Row 3), RGBA (Row 4)
             // So:
@@ -45,7 +45,7 @@ pc.extend(pc, function () {
             //   16x16 holds: 256 / 4  = Up to 64 bones
             //   32x32 holds: 1024 / 4 = Up to 256 bones
             //   64x64 holds: 4096 / 4 = Up to 1024 bones
-            // Let's assume for now noone will create a hierarchy of more
+            // Let's assume for now no one will create a hierarchy of more
             // than 1024 bones!
             var size;
             if (numBones > 256)
@@ -57,15 +57,14 @@ pc.extend(pc, function () {
             else
                 size = 8;
 
-            this.matrixPalette = new Float32Array(size * size * 4);
             this.boneTexture = new pc.Texture(device, {
                 width: size,
                 height: size,
                 format: pc.PIXELFORMAT_RGBA32F,
-                autoMipmap: false
+                mipmaps: false,
+                minFilter: pc.FILTER_NEAREST,
+                magFilter: pc.FILTER_NEAREST
             });
-            this.boneTexture.minFilter = pc.FILTER_NEAREST;
-            this.boneTexture.magFilter = pc.FILTER_NEAREST;
             this.matrixPalette = this.boneTexture.lock();
         } else {
             this.matrixPalette = new Float32Array(numBones * 16);

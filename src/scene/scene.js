@@ -65,6 +65,20 @@
         BLEND_SCREEN: 8,
 
         /**
+         * @enum pc.BLEND
+         * @name pc.BLEND_MIN
+         * @description Minimum color. Check app.graphicsDevice.extBlendMinmax for support.
+         */
+        BLEND_MIN: 9,
+
+        /**
+         * @enum pc.BLEND
+         * @name pc.BLEND_MAX
+         * @description Maximum color. Check app.graphicsDevice.extBlendMinmax for support.
+         */
+        BLEND_MAX: 10,
+
+        /**
          * @enum pc.FOG
          * @name pc.FOG_NONE
          * @description No fog is applied to the scene.
@@ -120,17 +134,15 @@
         LIGHTFALLOFF_LINEAR: 0,
         LIGHTFALLOFF_INVERSESQUARED: 1,
 
-        SHADOW_DEPTH: 0,
+        SHADOW_PCF3: 0,
+        SHADOW_DEPTH: 0, // alias for SHADOW_PCF3 for backwards compatibility
         SHADOW_VSM8: 1,
         SHADOW_VSM16: 2,
         SHADOW_VSM32: 3,
+        SHADOW_PCF5: 4,
 
         BLUR_BOX: 0,
         BLUR_GAUSSIAN: 1,
-
-        SHADOWSAMPLE_HARD: 0,
-        SHADOWSAMPLE_PCF3X3: 1,
-        SHADOWSAMPLE_MASK: 2,
 
         PARTICLESORT_NONE: 0,
         PARTICLESORT_DISTANCE: 1,
@@ -144,7 +156,7 @@
         /**
          * @enum pc.PROJECTION
          * @name pc.PROJECTION_PERSPECTIVE
-         * @description A perspective camera projection where the frustum shape is essentially pyrimidal.
+         * @description A perspective camera projection where the frustum shape is essentially pyramidal.
          */
         PROJECTION_PERSPECTIVE: 0,
         /**
@@ -166,10 +178,14 @@
 
         GAMMA_NONE: 0,
         GAMMA_SRGB: 1,
-        GAMMA_SRGBFAST: 2,
+        GAMMA_SRGBFAST: 2, // deprecated
+        GAMMA_SRGBHDR: 3,
 
         TONEMAP_LINEAR: 0,
         TONEMAP_FILMIC: 1,
+        TONEMAP_HEJL: 2,
+        TONEMAP_ACES: 3,
+        TONEMAP_ACES2: 4,
 
         SPECOCC_NONE: 0,
         SPECOCC_AO: 1,
@@ -182,6 +198,8 @@
         SHADERDEF_VCOLOR: 16,
         SHADERDEF_INSTANCING: 32,
         SHADERDEF_LM: 64,
+        SHADERDEF_DIRLM: 128,
+        SHADERDEF_SCREENSPACE: 256,
 
         LINEBATCH_WORLD: 0,
         LINEBATCH_OVERLAY: 1,
@@ -195,16 +213,31 @@
         SORTKEY_DEPTH: 1,
 
         SHADER_FORWARD: 0,
-        SHADER_DEPTH: 1,
-        SHADER_SHADOW: 2, // depth
-        // 3: VSM8,
-        // 4: VSM16,
-        // 5: VSM32,
-        // 6: DEPTH POINT
-        // 7: VSM8 POINT,
-        // 8: VSM16 POINT,
-        // 9: VSM32 POINT,
-        SHADER_PICK: 10
+        SHADER_FORWARDHDR: 1,
+        SHADER_DEPTH: 2,
+        SHADER_SHADOW: 3, // PCF3
+        // 4: VSM8,
+        // 5: VSM16,
+        // 6: VSM32,
+        // 7: PCF5,
+        // 8: PCF3 POINT
+        // 9: VSM8 POINT,
+        // 10: VSM16 POINT,
+        // 11: VSM32 POINT,
+        // 12: PCF5 POINT
+        // 13: PCF3 SPOT
+        // 14: VSM8 SPOT,
+        // 15: VSM16 SPOT,
+        // 16: VSM32 SPOT,
+        // 17: PCF5 SPOT
+        SHADER_PICK: 18,
+
+        BAKE_COLOR: 0,
+        BAKE_COLORDIR: 1,
+
+        VIEW_CENTER: 0,
+        VIEW_LEFT: 1,
+        VIEW_RIGHT: 2
     };
 
     pc.extend(pc, enums);
@@ -217,7 +250,8 @@
 pc.extend(pc, function () {
     /**
      * @name pc.Scene
-     * @class A scene is a container for {@link pc.Model} instances.
+     * @class A scene is graphical representation of an environment. It manages the scene hierarchy, all
+     * graphical objects, lights, and scene-wide properties.
      * @description Creates a new Scene.
      * @property {pc.Color} ambientLight The color of the scene's ambient light. Defaults to black (0, 0, 0).
      * @property {String} fog The type of fog used by the scene. Can be:
@@ -227,6 +261,7 @@ pc.extend(pc, function () {
      *     <li>pc.FOG_EXP</li>
      *     <li>pc.FOG_EXP2</li>
      * </ul>
+     * Defaults to pc.FOG_NONE.
      * @property {pc.Color} fogColor The color of the fog (if enabled). Defaults to black (0, 0, 0).
      * @property {Number} fogDensity The density of the fog (if enabled). This property is only valid if the
      * fog property is set to pc.FOG_EXP or pc.FOG_EXP2. Defaults to 0.
@@ -238,7 +273,6 @@ pc.extend(pc, function () {
      * <ul>
      *     <li>pc.GAMMA_NONE</li>
      *     <li>pc.GAMMA_SRGB</li>
-     *     <li>pc.GAMMA_SRGBFAST</li>
      * </ul>
      * Defaults to pc.GAMMA_NONE.
      * @property {Number} toneMapping The tonemapping transform to apply when writing fragments to the
@@ -246,14 +280,23 @@ pc.extend(pc, function () {
      * <ul>
      *     <li>pc.TONEMAP_LINEAR</li>
      *     <li>pc.TONEMAP_FILMIC</li>
+     *     <li>pc.TONEMAP_HEJL</li>
+     *     <li>pc.TONEMAP_ACES</li>
      * </ul>
      * Defaults to pc.TONEMAP_LINEAR.
      * @property {pc.Texture} skybox A cube map texture used as the scene's skybox. Defaults to null.
      * @property {Number} skyboxIntensity Multiplier for skybox intensity. Defaults to 1.
-     * @property {Number} skyboxMip The mip level of the skybox to be displayed. Defaults to 0 (base level).
-     * Only valid for prefiltered cubemap skyboxes.
-     * @property {Number} lightmapSizeMultiplier Lightmap resolution multiplier
-     * @property {Number} lightmapMaxResolution Maximum lightmap resolution
+     * @property {Number} skyboxMip The mip level of the skybox to be displayed. Only valid for prefiltered
+     * cubemap skyboxes. Defaults to 0 (base level).
+     * @property {Number} lightmapSizeMultiplier The lightmap resolution multiplier. Defaults to 1.
+     * @property {Number} lightmapMaxResolution The maximum lightmap resolution. Defaults to 2048.
+     * @property {Number} lightmapMode The lightmap baking mode. Can be:
+     * <ul>
+     *     <li>pc.BAKE_COLOR: single color lightmap
+     *     <li>pc.BAKE_COLORDIR: single color lightmap + dominant light direction (used for bump/specular)
+     * </ul>
+     * Only lights with bakeDir=true will be used for generating the dominant light direction. Defaults to
+     * pc.BAKE_COLORDIR.
      */
     var Scene = function Scene() {
         this.root = null;
@@ -264,7 +307,7 @@ pc.extend(pc, function () {
         this.shadowCasters = []; // All mesh instances that cast shadows
         this.immediateDrawCalls = []; // Only for this frame
 
-        this.fog = pc.FOG_NONE;
+        this._fog = pc.FOG_NONE;
         this.fogColor = new pc.Color(0, 0, 0);
         this.fogStart = 1;
         this.fogEnd = 1000;
@@ -276,12 +319,7 @@ pc.extend(pc, function () {
         this._toneMapping = 0;
         this.exposure = 1.0;
 
-        this._skyboxPrefiltered128 = null;
-        this._skyboxPrefiltered64 = null;
-        this._skyboxPrefiltered32 = null;
-        this._skyboxPrefiltered16 = null;
-        this._skyboxPrefiltered8 = null;
-        this._skyboxPrefiltered4 = null;
+        this._skyboxPrefiltered = [ null, null, null, null, null, null ];
 
         this._skyboxCubeMap = null;
         this._skyboxModel = null;
@@ -291,12 +329,19 @@ pc.extend(pc, function () {
 
         this.lightmapSizeMultiplier = 1;
         this.lightmapMaxResolution = 2048;
+        this.lightmapMode = pc.BAKE_COLORDIR;
 
         this._stats = {
             meshInstances: 0,
             lights: 0,
             dynamicLights: 0,
-            bakedLights: 0
+            bakedLights: 0,
+            lastStaticPrepareFullTime: 0,
+            lastStaticPrepareSearchTime: 0,
+            lastStaticPrepareWriteTime: 0,
+            lastStaticPrepareTriAabbTime: 0,
+            lastStaticPrepareCombineTime: 0,
+            updateShadersTime: 0
         };
 
         // Models
@@ -309,6 +354,8 @@ pc.extend(pc, function () {
 
         this._updateShaders = true;
         this._sceneShadersVersion = 0;
+
+        this._needsStaticPrepare = true;
     };
 
     Object.defineProperty(Scene.prototype, 'updateShaders', {
@@ -402,60 +449,78 @@ pc.extend(pc, function () {
 
     Object.defineProperty(Scene.prototype, 'skyboxPrefiltered128', {
         get: function () {
-            return this._skyboxPrefiltered128;
+            return this._skyboxPrefiltered[0];
         },
         set: function (value) {
-            this._skyboxPrefiltered128 = value;
+            if (this._skyboxPrefiltered[0] === value)
+                return;
+
+            this._skyboxPrefiltered[0] = value;
             this.updateShaders = true;
         }
     });
 
     Object.defineProperty(Scene.prototype, 'skyboxPrefiltered64', {
         get: function () {
-            return this._skyboxPrefiltered64;
+            return this._skyboxPrefiltered[1];
         },
         set: function (value) {
-            this._skyboxPrefiltered64 = value;
+            if (this._skyboxPrefiltered[1] === value)
+                return;
+
+            this._skyboxPrefiltered[1] = value;
             this.updateShaders = true;
         }
     });
 
     Object.defineProperty(Scene.prototype, 'skyboxPrefiltered32', {
         get: function () {
-            return this._skyboxPrefiltered32;
+            return this._skyboxPrefiltered[2];
         },
         set: function (value) {
-            this._skyboxPrefiltered32 = value;
+            if (this._skyboxPrefiltered[2] === value)
+                return;
+
+            this._skyboxPrefiltered[2] = value;
             this.updateShaders = true;
         }
     });
 
     Object.defineProperty(Scene.prototype, 'skyboxPrefiltered16', {
         get: function () {
-            return this._skyboxPrefiltered16;
+            return this._skyboxPrefiltered[3];
         },
         set: function (value) {
-            this._skyboxPrefiltered16 = value;
+            if (this._skyboxPrefiltered[3] === value)
+                return;
+
+            this._skyboxPrefiltered[3] = value;
             this.updateShaders = true;
         }
     });
 
     Object.defineProperty(Scene.prototype, 'skyboxPrefiltered8', {
         get: function () {
-            return this._skyboxPrefiltered8;
+            return this._skyboxPrefiltered[4];
         },
         set: function (value) {
-            this._skyboxPrefiltered8 = value;
+            if (this._skyboxPrefiltered[4] === value)
+                return;
+
+            this._skyboxPrefiltered[4] = value;
             this.updateShaders = true;
         }
     });
 
     Object.defineProperty(Scene.prototype, 'skyboxPrefiltered4', {
         get: function () {
-            return this._skyboxPrefiltered4;
+            return this._skyboxPrefiltered[5];
         },
         set: function (value) {
-            this._skyboxPrefiltered4 = value;
+            if (this._skyboxPrefiltered[5] === value)
+                return;
+
+            this._skyboxPrefiltered[5] = value;
             this.updateShaders = true;
         }
     });
@@ -463,25 +528,23 @@ pc.extend(pc, function () {
     Scene.prototype.applySettings = function (settings) {
         // settings
         this._gravity.set(settings.physics.gravity[0], settings.physics.gravity[1], settings.physics.gravity[2]);
-
-        var al = settings.render.global_ambient;
-        this.ambientLight = new pc.Color(al[0], al[1], al[2]);
-
-        this.fog = settings.render.fog;
-
-        var fogColor = settings.render.fog_color;
-        this.fogColor = new pc.Color(fogColor[0], fogColor[1], fogColor[2]);
-
+        this.ambientLight.set(settings.render.global_ambient[0], settings.render.global_ambient[1], settings.render.global_ambient[2]);
+        this._fog = settings.render.fog;
+        this.fogColor.set(settings.render.fog_color[0], settings.render.fog_color[1], settings.render.fog_color[2]);
         this.fogStart = settings.render.fog_start;
         this.fogEnd = settings.render.fog_end;
         this.fogDensity = settings.render.fog_density;
-        this.gammaCorrection = settings.render.gamma_correction;
-        this.toneMapping = settings.render.tonemapping;
+        this._gammaCorrection = settings.render.gamma_correction;
+        this._toneMapping = settings.render.tonemapping;
         this.lightmapSizeMultiplier = settings.render.lightmapSizeMultiplier;
         this.lightmapMaxResolution = settings.render.lightmapMaxResolution;
+        this.lightmapMode = settings.render.lightmapMode;
         this.exposure = settings.render.exposure;
-        this.skyboxIntensity = settings.render.skyboxIntensity===undefined? 1 : settings.render.skyboxIntensity;
-        this.skyboxMip = settings.render.skyboxMip===undefined? 0 : settings.render.skyboxMip;
+        this._skyboxIntensity = settings.render.skyboxIntensity === undefined ? 1 : settings.render.skyboxIntensity;
+        this._skyboxMip = settings.render.skyboxMip === undefined ? 0 : settings.render.skyboxMip;
+
+        this._resetSkyboxModel();
+        this.updateShaders = true;
     };
 
     // Shaders have to be updated if:
@@ -491,16 +554,20 @@ pc.extend(pc, function () {
     Scene.prototype.updateShadersFunc = function (device) {
         var i;
 
+        var time = pc.now();
+
         if (this._skyboxCubeMap && !this._skyboxModel) {
             var material = new pc.Material();
             var scene = this;
-            material.updateShader = function() {
+            material.updateShader = function(dev, sc, defs, staticLightList, pass) {
                 var library = device.getProgramLibrary();
                 var shader = library.getProgram('skybox', {rgbm:scene._skyboxCubeMap.rgbm,
                     hdr: (scene._skyboxCubeMap.rgbm || scene._skyboxCubeMap.format===pc.PIXELFORMAT_RGBA32F),
                     useIntensity: scene.skyboxIntensity!==1,
                     mip: scene._skyboxCubeMap.fixCubemapSeams? scene.skyboxMip : 0,
-                    fixSeams: scene._skyboxCubeMap.fixCubemapSeams, gamma:scene.gammaCorrection, toneMapping:scene.toneMapping});
+                    fixSeams: scene._skyboxCubeMap.fixCubemapSeams,
+                    gamma: (pass === pc.SHADER_FORWARDHDR ? (scene.gammaCorrection? pc.GAMMA_SRGBHDR : pc.GAMMA_NONE) : scene.gammaCorrection),
+                    toneMapping: (pass === pc.SHADER_FORWARDHDR ? pc.TONEMAP_LINEAR : scene.toneMapping)});
                 this.setShader(shader);
             };
 
@@ -551,6 +618,8 @@ pc.extend(pc, function () {
                 mat.shader = null;
             }
         }
+
+        this._stats.updateShadersTime += pc.now() - time;
     };
 
     Scene.prototype.getModels = function () {
@@ -558,9 +627,11 @@ pc.extend(pc, function () {
     };
 
     Scene.prototype._updateStats = function () {
+        // #ifdef PROFILER
         var stats = this._stats;
         stats.meshInstances = this.drawCalls.length;
         this._updateLightStats();
+        // #endif
     };
 
     Scene.prototype._updateLightStats = function () {
@@ -572,10 +643,10 @@ pc.extend(pc, function () {
         for(var i=0; i<stats.lights; i++) {
             l = this._lights[i];
             if (l._enabled) {
-                if ((l.mask & pc.MASK_DYNAMIC) || (l.mask & pc.MASK_BAKED)) { // if affects dynamic or baked objects in real-time
+                if ((l._mask & pc.MASK_DYNAMIC) || (l._mask & pc.MASK_BAKED)) { // if affects dynamic or baked objects in real-time
                     stats.dynamicLights++;
                 }
-                if (l.mask & pc.MASK_LIGHTMAP) { // if baked into lightmaps
+                if (l._mask & pc.MASK_LIGHTMAP) { // if baked into lightmaps
                     stats.bakedLights++;
                 }
             }
@@ -631,6 +702,19 @@ pc.extend(pc, function () {
         }
     };
 
+    Scene.prototype.addShadowCaster = function (model) {
+        var meshInstance;
+        var numMeshInstances = model.meshInstances.length;
+        for (var i = 0; i < numMeshInstances; i++) {
+            meshInstance = model.meshInstances[i];
+            if (meshInstance.castShadow) {
+                if (this.shadowCasters.indexOf(meshInstance) === -1) {
+                    this.shadowCasters.push(meshInstance);
+                }
+            }
+        }
+    };
+
     /**
      * @function
      * @name pc.Scene#removeModel
@@ -638,7 +722,7 @@ pc.extend(pc, function () {
      * @author Will Eastcott
      */
     Scene.prototype.removeModel = function (model) {
-        var i, len;
+        var i, j, len, drawCall, spliceOffset, spliceCount;
 
         // Verify the model is in the scene
         var index = this._models.indexOf(model);
@@ -655,10 +739,26 @@ pc.extend(pc, function () {
             var numMeshInstances = model.meshInstances.length;
             for (i = 0; i < numMeshInstances; i++) {
                 meshInstance = model.meshInstances[i];
-                index = this.drawCalls.indexOf(meshInstance);
-                if (index !== -1) {
-                    this.drawCalls.splice(index, 1);
+
+                spliceOffset = -1;
+                spliceCount = 0;
+                len = this.drawCalls.length;
+                for(j=0; j<len; j++) {
+                    drawCall = this.drawCalls[j];
+                    if (drawCall===meshInstance) {
+                        spliceOffset = j;
+                        spliceCount = 1;
+                        break;
+                    }
+                    if (drawCall._staticSource===meshInstance) {
+                        if (spliceOffset<0) spliceOffset = j;
+                        spliceCount++;
+                    } else if (spliceOffset>=0) {
+                        break;
+                    }
                 }
+                if (spliceOffset>=0) this.drawCalls.splice(spliceOffset, spliceCount);
+
                 if (meshInstance.castShadow) {
                     index = this.shadowCasters.indexOf(meshInstance);
                     if (index !== -1) {
@@ -675,6 +775,21 @@ pc.extend(pc, function () {
             this._updateStats();
         }
     };
+
+    Scene.prototype.removeShadowCaster = function (model) {
+        var meshInstance, index;
+        var numMeshInstances = model.meshInstances.length;
+        for (var i = 0; i < numMeshInstances; i++) {
+            meshInstance = model.meshInstances[i];
+            if (meshInstance.castShadow) {
+                index = this.shadowCasters.indexOf(meshInstance);
+                if (index !== -1) {
+                    this.shadowCasters.splice(index, 1);
+                }
+            }
+        }
+    };
+
 
     Scene.prototype.containsModel = function (model) {
         return this._models.indexOf(model) >= 0;
@@ -714,23 +829,34 @@ pc.extend(pc, function () {
     };
 
     Scene.prototype.setSkybox = function (cubemaps) {
-        if (cubemaps !== null) {
-            this._skyboxPrefiltered128 = cubemaps[1];
-            this._skyboxPrefiltered64 = cubemaps[2];
-            this._skyboxPrefiltered32 = cubemaps[3];
-            this._skyboxPrefiltered16 = cubemaps[4];
-            this._skyboxPrefiltered8 = cubemaps[5];
-            this._skyboxPrefiltered4 = cubemaps[6];
-            this.skybox = cubemaps[0];
-        } else {
-            this._skyboxPrefiltered128 = null;
-            this._skyboxPrefiltered64 = null;
-            this._skyboxPrefiltered32 = null;
-            this._skyboxPrefiltered16 = null;
-            this._skyboxPrefiltered8 = null;
-            this._skyboxPrefiltered4 = null;
-            this.skybox = null;
+        var i;
+        if (! cubemaps)
+            cubemaps = [ null, null, null, null, null, null, null ];
+
+        // check if any values actually changed
+        // to prevent unnecessary recompilations
+
+        var different = false;
+
+        if (this._skyboxCubeMap !== cubemaps[0])
+            different = true;
+
+        if (!different) {
+            for (i = 0; i < 6 && !different; i++) {
+                if (this._skyboxPrefiltered[i] !== cubemaps[i + 1])
+                    different = true;
+            }
         }
+
+        if (!different)
+            return;
+
+        // set skybox
+
+        for (i = 0; i < 6; i++)
+            this._skyboxPrefiltered[i] = cubemaps[i + 1];
+
+        this.skybox = cubemaps[0];
     };
 
     /**

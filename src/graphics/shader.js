@@ -32,7 +32,7 @@ pc.extend(pc, function () {
 
     /**
      * @name pc.Shader
-     * @class A shader is a program that is repsonsible for rendering graphical primitives on a device's
+     * @class A shader is a program that is responsible for rendering graphical primitives on a device's
      * graphics processor. The shader is generated from a shader definition. This shader definition specifies
      * the code for processing vertices and fragments processed by the GPU. The language of the code is GLSL
      * (or more specifically ESSL, the OpenGL ES Shading Language). The shader definition also describes how
@@ -46,6 +46,7 @@ pc.extend(pc, function () {
      * shader.
      * @param {String} definition.vshader Vertex shader source (GLSL code).
      * @param {String} definition.fshader Fragment shader source (GLSL code).
+     * @param {Boolean} definition.useTransformFeedback Specifies that this shader outputs post-VS data to a buffer
      * @example
      * // Create a shader that renders primitives with a solid red color
      * var shaderDefinition = {
@@ -74,6 +75,7 @@ pc.extend(pc, function () {
      * @author Will Eastcott
      */
     var Shader = function (graphicsDevice, definition) {
+        this._refCount = 0;
         this.device = graphicsDevice;
         this.definition = definition;
         this.ready = false;
@@ -112,6 +114,7 @@ pc.extend(pc, function () {
     Shader.prototype = {
         link: function () {
             var gl = this.device.gl;
+            var retValue = true;
 
             // #ifdef PROFILER
             var startTime = pc.now();
@@ -121,18 +124,36 @@ pc.extend(pc, function () {
             });
             // #endif
 
+            if (this.device.webgl2 && this.definition.useTransformFeedback) {
+                // Collect all "out_" attributes and use them for output
+                var attrs = this.definition.attributes;
+                var outNames = [];
+                for (var attr in attrs) {
+                    if (attrs.hasOwnProperty(attr)) {
+                        outNames.push("out_" + attr);
+                    }
+                }
+                gl.transformFeedbackVaryings(this.program, outNames, gl.INTERLEAVED_ATTRIBS);
+            }
+
             gl.linkProgram(this.program);
 
             // check for errors
             // vshader
-            if (! gl.getShaderParameter(this.vshader, gl.COMPILE_STATUS))
+            if (! gl.getShaderParameter(this.vshader, gl.COMPILE_STATUS)) {
                 logERROR("Failed to compile vertex shader:\n\n" + addLineNumbers(this.definition.vshader) + "\n\n" + gl.getShaderInfoLog(this.vshader));
+                retValue = false;
+            }
             // fshader
-            if (! gl.getShaderParameter(this.fshader, gl.COMPILE_STATUS))
+            if (! gl.getShaderParameter(this.fshader, gl.COMPILE_STATUS)) {
                 logERROR("Failed to compile fragment shader:\n\n" + addLineNumbers(this.definition.fshader) + "\n\n" + gl.getShaderInfoLog(this.fshader));
+                retValue = false;
+            }
             // program
-            if (! gl.getProgramParameter(this.program, gl.LINK_STATUS))
+            if (! gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
                 logERROR("Failed to link shader program. Error: " + gl.getProgramInfoLog(this.program));
+                retValue = false;
+            }
 
             gl.deleteShader(this.vshader);
             gl.deleteShader(this.fshader);
@@ -163,6 +184,11 @@ pc.extend(pc, function () {
             _typeToPc[gl.FLOAT_MAT4]   = pc.UNIFORMTYPE_MAT4;
             _typeToPc[gl.SAMPLER_2D]   = pc.UNIFORMTYPE_TEXTURE2D;
             _typeToPc[gl.SAMPLER_CUBE] = pc.UNIFORMTYPE_TEXTURECUBE;
+            if (this.device.webgl2) {
+                _typeToPc[gl.SAMPLER_2D_SHADOW]   = pc.UNIFORMTYPE_TEXTURE2D_SHADOW;
+                _typeToPc[gl.SAMPLER_CUBE_SHADOW] = pc.UNIFORMTYPE_TEXTURECUBE_SHADOW;
+                _typeToPc[gl.SAMPLER_3D]          = pc.UNIFORMTYPE_TEXTURE3D;
+            }
 
             var numAttributes = gl.getProgramParameter(this.program, gl.ACTIVE_ATTRIBUTES);
             while (i < numAttributes) {
@@ -174,8 +200,7 @@ pc.extend(pc, function () {
                     console.error('Vertex shader attribute "' + info.name + '" is not mapped to a semantic in shader definition.');
                 }
 
-                var attr = new pc.ShaderInput(this.device, this.definition.attributes[info.name], _typeToPc[info.type], location);
-                this.attributes.push(attr);
+                this.attributes.push(new pc.ShaderInput(this.device, this.definition.attributes[info.name], _typeToPc[info.type], location));
             }
 
             // Query the program for each shader state (GLSL 'uniform')
@@ -184,7 +209,9 @@ pc.extend(pc, function () {
             while (i < numUniforms) {
                 info = gl.getActiveUniform(this.program, i++);
                 location = gl.getUniformLocation(this.program, info.name);
-                if ((info.type === gl.SAMPLER_2D) || (info.type === gl.SAMPLER_CUBE)) {
+                if (info.type === gl.SAMPLER_2D || info.type === gl.SAMPLER_CUBE ||
+                    (this.device.webgl2 && (info.type === gl.SAMPLER_2D_SHADOW || info.type === gl.SAMPLER_CUBE_SHADOW || info.type === gl.SAMPLER_3D))
+                    ) {
                     this.samplers.push(new pc.ShaderInput(this.device, info.name, _typeToPc[info.type], location));
                 } else {
                     this.uniforms.push(new pc.ShaderInput(this.device, info.name, _typeToPc[info.type], location));
@@ -201,6 +228,8 @@ pc.extend(pc, function () {
             });
             this.device._shaderStats.compileTime += endTime - startTime;
             // #endif
+
+            return retValue;
         },
 
         /**
@@ -209,8 +238,12 @@ pc.extend(pc, function () {
          * @description Frees resources associated with this shader.
          */
         destroy: function () {
-            var gl = this.device.gl;
-            gl.deleteProgram(this.program);
+            if (this.program) {
+                var gl = this.device.gl;
+                gl.deleteProgram(this.program);
+                this.program = null;
+                this.device.removeShaderFromCache(this);
+            }
         }
     };
 

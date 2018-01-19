@@ -2,7 +2,7 @@ pc.extend(pc, function () {
     /**
     * @component
     * @name pc.ScriptComponent
-    * @class The ScriptComponent allows you to extend the functionality of an Entity by attaching your own Script Types defined in javascript files
+    * @class The ScriptComponent allows you to extend the functionality of an Entity by attaching your own Script Types defined in JavaScript files
     * to be executed with access to the Entity. For more details on scripting see <a href="//developer.playcanvas.com/user-manual/scripting/">Scripting</a>.
     * @param {pc.ScriptComponentSystem} system The ComponentSystem that created this Component
     * @param {pc.Entity} entity The Entity that this Component is attached to.
@@ -31,7 +31,7 @@ pc.extend(pc, function () {
     * @event
     * @name pc.ScriptComponent#enable
     * @description Fired when Component becomes enabled
-    * Note: this event does not takes in account entity or any of its parent enabled state
+    * Note: this event does not take in account entity or any of its parent enabled state
     * @example
     * entity.script.on('enable', function () {
     *     // component is enabled
@@ -42,7 +42,7 @@ pc.extend(pc, function () {
     * @event
     * @name pc.ScriptComponent#disable
     * @description Fired when Component becomes disabled
-    * Note: this event does not takes in account entity or any of its parent enabled state
+    * Note: this event does not take in account entity or any of its parent enabled state
     * @example
     * entity.script.on('disable', function () {
     *     // component is disabled
@@ -53,7 +53,7 @@ pc.extend(pc, function () {
     * @event
     * @name pc.ScriptComponent#state
     * @description Fired when Component changes state to enabled or disabled
-    * Note: this event does not takes in account entity or any of its parent enabled state
+    * Note: this event does not take in account entity or any of its parent enabled state
     * @param {Boolean} enabled True if now enabled, False if disabled
     * @example
     * entity.script.on('state', function (enabled) {
@@ -119,6 +119,33 @@ pc.extend(pc, function () {
 
     /**
     * @event
+    * @name pc.ScriptComponent#move
+    * @description Fired when a script instance is moved in component
+    * @param {String} name The name of the Script Type
+    * @param {ScriptType} scriptInstance The instance of the {@link ScriptType} that has been moved
+    * @param {Number} ind New position index
+    * @param {Number} indOld Old position index
+    * @example
+    * entity.script.on('move', function (name, scriptInstance, ind, indOld) {
+    *     // script instance has been moved in component
+    * });
+    */
+
+    /**
+    * @event
+    * @name pc.ScriptComponent#move:[name]
+    * @description Fired when a script instance is moved in component
+    * @param {ScriptType} scriptInstance The instance of the {@link ScriptType} that has been moved
+    * @param {Number} ind New position index
+    * @param {Number} indOld Old position index
+    * @example
+    * entity.script.on('move:playerController', function (scriptInstance, ind, indOld) {
+    *     // script instance 'playerController' has been moved in component
+    * });
+    */
+
+    /**
+    * @event
     * @name pc.ScriptComponent#error
     * @description Fired when a script instance had an exception
     * @param {ScriptType} scriptInstance The instance of the {@link ScriptType} that raised the exception
@@ -166,7 +193,7 @@ pc.extend(pc, function () {
 
             this._oldState = state;
 
-            this.fire('enable');
+            this.fire(this.enabled ? 'enable' : 'disable');
             this.fire('state', this.enabled);
 
             var script;
@@ -176,6 +203,8 @@ pc.extend(pc, function () {
 
                 if (! script._initialized && script.enabled) {
                     script._initialized = true;
+
+                    script.__initializeAttributes(true);
 
                     if (script.initialize)
                         this._scriptMethod(script, ScriptComponent.scriptMethods.initialize);
@@ -215,10 +244,11 @@ pc.extend(pc, function () {
         },
 
         _onInitialize: function() {
-            var script;
-            for(var i = 0, len = this.scripts.length; i < len; i++) {
-                script = this.scripts[i];
-                if (script.enabled && ! script._initialized) {
+            var script, scripts = this._scripts;
+
+            for(var i = 0, len = scripts.length; i < len; i++) {
+                script = scripts[i];
+                if (! script._initialized && script.enabled) {
                     script._initialized = true;
                     if (script.initialize)
                         this._scriptMethod(script, ScriptComponent.scriptMethods.initialize);
@@ -227,10 +257,11 @@ pc.extend(pc, function () {
         },
 
         _onPostInitialize: function() {
-            var script;
-            for(var i = 0, len = this.scripts.length; i < len; i++) {
-                script = this.scripts[i];
-                if (script.enabled && ! script._postInitialized) {
+            var script, scripts = this._scripts;
+
+            for(var i = 0, len = scripts.length; i < len; i++) {
+                script = scripts[i];
+                if (! script._postInitialized && script.enabled) {
                     script._postInitialized = true;
                     if (script.postInitialize)
                         this._scriptMethod(script, ScriptComponent.scriptMethods.postInitialize);
@@ -239,19 +270,21 @@ pc.extend(pc, function () {
         },
 
         _onUpdate: function(dt) {
-            var script;
-            for(var i = 0, len = this.scripts.length; i < len; i++) {
-                script = this.scripts[i];
-                if (script.enabled && script.update)
+            var script, scripts = this._scripts;
+
+            for(var i = 0, len = scripts.length; i < len; i++) {
+                script = scripts[i];
+                if (script.update && script.enabled)
                     this._scriptMethod(script, ScriptComponent.scriptMethods.update, dt);
             }
         },
 
         _onPostUpdate: function(dt) {
-            var script;
-            for(var i = 0, len = this.scripts.length; i < len; i++) {
-                script = this.scripts[i];
-                if (script.enabled && script.postUpdate)
+            var script, scripts = this._scripts;
+
+            for(var i = 0, len = scripts.length; i < len; i++) {
+                script = scripts[i];
+                if (script.postUpdate && script.enabled)
                     this._scriptMethod(script, ScriptComponent.scriptMethods.postUpdate, dt);
             }
         },
@@ -285,7 +318,7 @@ pc.extend(pc, function () {
          * @param {Object} [args] Object with arguments for a script
          * @param {Boolean} [args.enabled] if script instance is enabled after creation
          * @param {Object} [args.attributes] Object with values for attributes, where key is name of an attribute
-         * @returns {ScriptType} Returns an instance of a {@link ScriptType} if successfuly attached to an entity,
+         * @returns {ScriptType} Returns an instance of a {@link ScriptType} if successfully attached to an entity,
          * or null if it failed because a script with a same name has already been added
          * or if the {@link ScriptType} cannot be found by name in the {@link pc.ScriptRegistry}.
          * @example
@@ -377,7 +410,7 @@ pc.extend(pc, function () {
          * @name pc.ScriptComponent#destroy
          * @description Destroy the script instance that is attached to an entity.
          * @param {String} name The name of the Script Type
-         * @returns {Boolean} If it was successfuly destroyed
+         * @returns {Boolean} If it was successfully destroyed
          * @example
          * entity.script.destroy('playerController');
          */
@@ -402,7 +435,7 @@ pc.extend(pc, function () {
             }
 
             // remove swap event
-            this.system.app.scripts.unbind('swap:' + scriptName, scriptData.onSwap);
+            this.system.app.scripts.off('swap:' + scriptName, scriptData.onSwap);
 
             delete this._scriptsIndex[scriptName];
             delete this[scriptName];
@@ -460,9 +493,9 @@ pc.extend(pc, function () {
          * @description Move script instance to different position to alter update order of scripts within entity.
          * @param {String} name The name of the Script Type
          * @param {Number} ind New position index
-         * @returns {Boolean} If it was successfuly moved
+         * @returns {Boolean} If it was successfully moved
          * @example
-         * entity.script.destroy('playerController');
+         * entity.script.move('playerController', 0);
          */
         move: function(name, ind) {
             if (ind >= this._scripts.length)

@@ -17,6 +17,7 @@ pc.ApplicationStats = function(device) {
         cullTime: 0,
         sortTime: 0,
         skinTime: 0,
+        morphTime: 0,
         instancingTime: 0,
 
         triangles: 0,
@@ -75,6 +76,12 @@ pc.ApplicationStats = function(device) {
     Object.defineProperty(this, 'lightmapper', {
         get: function() {
             return pc.Application._currentApplication.lightmapper._stats;
+        }
+    });
+
+    Object.defineProperty(this, 'batcher', {
+        get: function() {
+            return pc.Application._currentApplication.batcher._stats;
         }
     });
 

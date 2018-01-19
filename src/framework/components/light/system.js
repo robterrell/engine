@@ -33,7 +33,7 @@ pc.extend(pc, function () {
             for(var i=0; i<_props.length; i++) {
                 name = _props[i];
                 data[name] = _data[name];
-            };
+            }
 
             if (!data.type)
                 data.type = component.data.type;
@@ -43,13 +43,19 @@ pc.extend(pc, function () {
             if (data.color && pc.type(data.color) === 'array')
                 data.color = new pc.Color(data.color[0], data.color[1], data.color[2]);
 
+            if (data.cookieOffset && data.cookieOffset instanceof Array)
+                data.cookieOffset = new pc.Vec2(data.cookieOffset[0], data.cookieOffset[1]);
+
+            if (data.cookieScale && data.cookieScale instanceof Array)
+                data.cookieScale = new pc.Vec2(data.cookieScale[0], data.cookieScale[1]);
+
             if (data.enable) {
                 console.warn("WARNING: enable: Property is deprecated. Set enabled property instead.");
                 data.enabled = data.enable;
             }
 
             var light = new pc.Light();
-            light.setType(lightTypes[data.type]);
+            light.type = lightTypes[data.type];
             light._node = component.entity;
             this.app.scene.addLight(light);
             component.data.light = light;
@@ -69,20 +75,20 @@ pc.extend(pc, function () {
             var _props = pc._lightProps;
             for(var i=0; i<_props.length; i++) {
                 name = _props[i];
+                if (name==="light") continue;
                 if (light[name] && light[name].clone) {
                     data[name] = light[name].clone();
                 } else {
                     data[name] = light[name];
                 }
             }
-            data.light = null;
 
             this.addComponent(clone, data);
         },
 
         changeType: function (component, oldValue, newValue) {
             if (oldValue!==newValue) {
-                component.light.setType(lightTypes[newValue]);
+                component.light.type = lightTypes[newValue];
             }
         }
     });

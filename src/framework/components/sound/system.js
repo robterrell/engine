@@ -1,4 +1,16 @@
 pc.extend(pc, function () {
+    var _schema = [
+        'enabled',
+        'volume',
+        'pitch',
+        'positional',
+        'refDistance',
+        'maxDistance',
+        'rollOffFactor',
+        'distanceModel',
+        'slots'
+    ];
+
     /**
      * @name pc.SoundComponentSystem
      * @class Manages creation of {@link pc.SoundComponent}s.
@@ -19,17 +31,7 @@ pc.extend(pc, function () {
         this.ComponentType = pc.SoundComponent;
         this.DataType = pc.SoundComponentData;
 
-        this.schema = [
-            'enabled',
-            'volume',
-            'pitch',
-            'positional',
-            'refDistance',
-            'maxDistance',
-            'rollOffFactor',
-            'distanceModel',
-            'slots'
-        ];
+        this.schema = _schema;
 
         this.manager = manager;
 
@@ -39,6 +41,8 @@ pc.extend(pc, function () {
     };
     SoundComponentSystem = pc.inherits(SoundComponentSystem, pc.ComponentSystem);
 
+    pc.Component._buildAccessors(pc.SoundComponent.prototype, _schema);
+
     pc.extend(SoundComponentSystem.prototype, {
         initializeComponentData: function (component, data, properties) {
             properties = ['volume', 'pitch', 'positional', 'refDistance', 'maxDistance', 'rollOffFactor', 'distanceModel', 'slots', 'enabled'];
@@ -46,11 +50,12 @@ pc.extend(pc, function () {
         },
 
         cloneComponent: function (entity, clone) {
+            var key;
             var oldData = entity.sound.data;
             var newData = {};
 
             // copy old data to new data
-            for (var key in oldData) {
+            for (key in oldData) {
                 if (oldData.hasOwnProperty(key)) {
                     newData[key] = oldData[key];
                 }
@@ -60,7 +65,7 @@ pc.extend(pc, function () {
             // simple option objects
             newData.slots = {};
 
-            for (var key in oldData.slots) {
+            for (key in oldData.slots) {
                 var oldSlot = oldData.slots[key];
                 if (oldSlot instanceof pc.SoundSlot) {
                     newData.slots[key] = {

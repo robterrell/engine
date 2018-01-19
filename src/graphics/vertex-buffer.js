@@ -10,6 +10,7 @@ pc.extend(pc, function () {
      * @param {pc.VertexFormat} format The vertex format of this vertex buffer.
      * @param {Number} numVertices The number of vertices that this vertex buffer will hold.
      * @param {Number} [usage] The usage type of the vertex buffer (see pc.BUFFER_*).
+     * @param {ArrayBuffer} [initialData] Initial data.
      */
     var VertexBuffer = function (graphicsDevice, format, numVertices, usage, initialData) {
         // Initialize optional parameters
@@ -47,9 +48,22 @@ pc.extend(pc, function () {
          * @description Frees resources associated with this vertex buffer.
          */
         destroy: function () {
-            var gl = this.device.gl;
+            if (!this.bufferId) return;
+            var device = this.device;
+            var gl = device.gl;
             gl.deleteBuffer(this.bufferId);
-            this.device._vram.vb -= this.storage.byteLength;
+            device._vram.vb -= this.storage.byteLength;
+            this.bufferId = null;
+
+            // If this buffer was bound, must clean up attribute-buffer bindings to prevent GL errors
+            device.boundBuffer = null;
+            device.vertexBuffers.length = 0;
+            device.vbOffsets.length = 0;
+            device.attributesInvalidated = true;
+            for(var loc in device.enabledAttributes) {
+                gl.disableVertexAttribArray(loc);
+            }
+            device.enabledAttributes = {};
         },
 
         /**
@@ -115,6 +129,13 @@ pc.extend(pc, function () {
                 case pc.BUFFER_STREAM:
                     glUsage = gl.STREAM_DRAW;
                     break;
+                case pc.BUFFER_GPUDYNAMIC:
+                    if (this.device.webgl2) {
+                        glUsage = gl.DYNAMIC_COPY;
+                    } else {
+                        glUsage = gl.STATIC_DRAW;
+                    }
+                    break;
             }
 
             gl.bindBuffer(gl.ARRAY_BUFFER, this.bufferId);
@@ -122,7 +143,7 @@ pc.extend(pc, function () {
         },
 
         setData: function (data) {
-            if (data.byteLength!==this.numBytes) {
+            if (data.byteLength !== this.numBytes) {
                 console.error("VertexBuffer: wrong initial data size: expected " + this.numBytes + ", got " + data.byteLength);
                 return false;
             }

@@ -1,16 +1,40 @@
 pc.extend(pc, (function () {
     'use strict';
 
+    var typeNumber = 'number';
+
     /**
     * @name pc.Mat3
     * @class A 3x3 matrix.
     * @description Creates a new Mat3 object
+    * @param {Number} [v0] The value in row 0, column 0. If v0 is an array of length 9, the array will be used to populate all components.
+    * @param {Number} [v1] The value in row 1, column 0.
+    * @param {Number} [v2] The value in row 2, column 0.
+    * @param {Number} [v3] The value in row 0, column 1.
+    * @param {Number} [v4] The value in row 1, column 1.
+    * @param {Number} [v5] The value in row 2, column 1.
+    * @param {Number} [v6] The value in row 0, column 2.
+    * @param {Number} [v7] The value in row 1, column 2.
+    * @param {Number} [v8] The value in row 2, column 2.
     */
-    var Mat3 = function () {
+    var Mat3 = function (v0, v1, v2, v3, v4, v5, v6, v7, v8) {
+        if (v0 && v0.length === 9) {
+            this.data = new Float32Array(v0);
+            return;
+        }
+
         this.data = new Float32Array(9);
 
-        if (arguments.length === 9) {
-            this.data.set(arguments);
+        if (typeof(v0) === typeNumber) {
+            this.data[0] = v0;
+            this.data[1] = v1;
+            this.data[2] = v2;
+            this.data[3] = v3;
+            this.data[4] = v4;
+            this.data[5] = v5;
+            this.data[6] = v6;
+            this.data[7] = v7;
+            this.data[8] = v8;
         } else {
             this.setIdentity();
         }
@@ -24,9 +48,8 @@ pc.extend(pc, (function () {
          * @returns {pc.Mat3} A duplicate matrix.
          * @example
          * var src = new pc.Mat3().translate(10, 20, 30);
-         * var dst = new pc.Mat3();
-         * dst.copy(src);
-         * console.log("The two matrices are " + (src.equal(dst) ? "equal" : "different"));
+         * var dst = src.clone();
+         * console.log("The two matrices are " + (src.equals(dst) ? "equal" : "different"));
          */
         clone: function () {
             return new pc.Mat3().copy(this);
@@ -42,7 +65,7 @@ pc.extend(pc, (function () {
          * var src = new pc.Mat3().translate(10, 20, 30);
          * var dst = new pc.Mat3();
          * dst.copy(src);
-         * console.log("The two matrices are " + (src.equal(dst) ? "equal" : "different"));
+         * console.log("The two matrices are " + (src.equals(dst) ? "equal" : "different"));
          */
         copy: function (rhs) {
             var src = rhs.data;
@@ -116,7 +139,7 @@ pc.extend(pc, (function () {
          * @returns {pc.Mat3} Self for chaining.
          * @example
          * m.setIdentity();
-         * console.log("The two matrices are " + (src.equal(dst) ? "equal" : "different"));
+         * console.log("The matrix is " + (m.isIdentity() ? "identity" : "not identity"));
          */
         setIdentity: function () {
             var m = this.data;

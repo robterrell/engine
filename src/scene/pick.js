@@ -1,6 +1,13 @@
 pc.extend(pc, function () {
 
     function sortDrawCalls(drawCallA, drawCallB) {
+
+        if (drawCallA.layer === drawCallB.layer) {
+            if (drawCallA.drawOrder && drawCallB.drawOrder) {
+                return drawCallA.drawOrder - drawCallB.drawOrder;
+            }
+        }
+
         return drawCallB.key - drawCallA.key;
     }
 
@@ -38,43 +45,48 @@ pc.extend(pc, function () {
      * @function
      * @name pc.Picker#getSelection
      * @description Return the list of mesh instances selected by the specified rectangle in the
-     * previously prepared pick buffer.
-     * @param {Object} rect The selection rectangle.
-     * @param {Number} rect.x The left edge of the rectangle
-     * @param {Number} rect.y The bottom edge of the rectangle
-     * @param {Number} [rect.width] The width of the rectangle
-     * @param {Number} [rect.height] The height of the rectangle
+     * previously prepared pick buffer.The rectangle using top-left coordinate system.
+     * @param {Number} x The left edge of the rectangle
+     * @param {Number} y The top edge of the rectangle
+     * @param {Number} [width] The width of the rectangle
+     * @param {Number} [height] The height of the rectangle
      * @returns {pc.MeshInstance[]} An array of mesh instances that are in the selection
      * @example
      * // Get the selection at the point (10,20)
-     * var selection = picker.getSelection({
-     *     x: 10,
-     *     y: 20
-     * });
+     * var selection = picker.getSelection(10, 20);
      *
      * // Get all models in rectangle with corners at (10,20) and (20,40)
-     * var selection = picker.getSelection({
-     *     x: 10,
-     *     y: 20,
-     *     width: 10,
-     *     height: 20
-     * });
+     * var selection = picker.getSelection(10, 20, 10, 20);
      */
-    Picker.prototype.getSelection = function (rect) {
+    Picker.prototype.getSelection = function (x, y, width, height) {
         var device = this.device;
 
-        rect.width = rect.width || 1;
-        rect.height = rect.height || 1;
+        if (typeof x === 'object') {
+            // #ifdef DEBUG
+            console.warn("Picker.getSelection:param 'rect' is deprecated, use 'x, y, width, height' instead.");
+            // #endif
+
+            var rect = x;
+            x = rect.x;
+            y = rect.y;
+            width = rect.width;
+            height = rect.height;
+        } else {
+            y = this._pickBufferTarget.height - (y + (height || 1));
+        }
+
+        width = width || 1;
+        height = height || 1;
 
         // Cache active render target
-        var prevRenderTarget = device.getRenderTarget();
+        var prevRenderTarget = device.renderTarget;
 
         // Ready the device for rendering to the pick buffer
         device.setRenderTarget(this._pickBufferTarget);
         device.updateBegin();
 
-        var pixels = new Uint8Array(4 * rect.width * rect.height);
-        device.readPixels(rect.x, rect.y, rect.width, rect.height, pixels);
+        var pixels = new Uint8Array(4 * width * height);
+        device.readPixels(x, y, width, height, pixels);
 
         device.updateEnd();
 
@@ -83,7 +95,7 @@ pc.extend(pc, function () {
 
         var selection = [];
 
-        for (var i = 0; i < rect.width * rect.height; i++) {
+        for (var i = 0; i < width * height; i++) {
             var r = pixels[4 * i + 0];
             var g = pixels[4 * i + 1];
             var b = pixels[4 * i + 2];
@@ -116,7 +128,7 @@ pc.extend(pc, function () {
         this.scene = scene;
 
         // Cache active render target
-        var prevRenderTarget = device.getRenderTarget();
+        var prevRenderTarget = device.renderTarget;
 
         // Ready the device for rendering to the pick buffer
         device.setRenderTarget(this._pickBufferTarget);
@@ -203,6 +215,7 @@ pc.extend(pc, function () {
                     if (!shader) {
                         shader = this.library.getProgram('pick', {
                                 skin: !!meshInstance.skinInstance,
+                                screenSpace: meshInstance.screenSpace,
                                 opacityMap: !!material.opacityMap,
                                 opacityChannel: material.opacityMap? (material.opacityMapChannel || 'r') : null
                             });
@@ -210,7 +223,8 @@ pc.extend(pc, function () {
                     }
                     device.setShader(shader);
 
-                    device.setVertexBuffer(mesh.vertexBuffer, 0);
+                    device.setVertexBuffer((meshInstance.morphInstance && meshInstance.morphInstance._vertexBuffer) ?
+                        meshInstance.morphInstance._vertexBuffer : mesh.vertexBuffer, 0);
                     device.setIndexBuffer(mesh.indexBuffer[pc.RENDERSTYLE_SOLID]);
                     device.draw(mesh.primitive[pc.RENDERSTYLE_SOLID]);
                 }
@@ -241,12 +255,10 @@ pc.extend(pc, function () {
             format: pc.PIXELFORMAT_R8_G8_B8_A8,
             width: width,
             height: height,
-            autoMipmap: false
+            mipmaps: false,
+            minFilter: pc.FILTER_NEAREST,
+            magFilter: pc.FILTER_NEAREST
         });
-        colorBuffer.minFilter = pc.FILTER_NEAREST;
-        colorBuffer.magFilter = pc.FILTER_NEAREST;
-        colorBuffer.addressU = pc.ADDRESS_CLAMP_TO_EDGE;
-        colorBuffer.addressV = pc.ADDRESS_CLAMP_TO_EDGE;
         this._pickBufferTarget = new pc.RenderTarget(this.device, colorBuffer, { depth: true });
     };
 

@@ -5,16 +5,19 @@ pc.extend(pc, (function () {
     * @name pc.Vec2
     * @class A 2-dimensional vector.
     * @description Creates a new Vec2 object
+    * @param {Number} [x] The x value. If x is an array of length 2, the array will be used to populate all components.
+    * @param {Number} [y] The y value
     */
-    var Vec2 = function () {
+    var Vec2 = function (x, y) {
+        if (x && x.length === 2) {
+            this.data = new Float32Array(x);
+            return;
+        }
+
         this.data = new Float32Array(2);
 
-        if (arguments.length === 2) {
-            this.data.set(arguments);
-        } else {
-            this.data[0] = 0;
-            this.data[1] = 0;
-        }
+        this.data[0] = x || 0;
+        this.data[1] = y || 0;
     };
 
     Vec2.prototype = {
@@ -213,7 +216,7 @@ pc.extend(pc, (function () {
         /**
          * @function
          * @name pc.Vec2#mul
-         * @description Returns the result of multiplying the specified 2-dimensional vectors together.
+         * @description Multiplies a 2-dimensional vector to another in place.
          * @param {pc.Vec2} rhs The 2-dimensional vector used as the second multiplicand of the operation.
          * @returns {pc.Vec2} Self for chaining.
          * @example
@@ -267,6 +270,7 @@ pc.extend(pc, (function () {
          * @function
          * @name pc.Vec2#normalize
          * @description Returns the specified 2-dimensional vector copied and converted to a unit vector.
+         * If the vector has a length of zero, the vector's elements will be set to zero.
          * @returns {pc.Vec2} Self for chaining.
          * @example
          * var v = new pc.Vec2(25, 0);
@@ -277,15 +281,24 @@ pc.extend(pc, (function () {
          * console.log("The result of the vector normalization is: " + v.toString());
          */
         normalize: function () {
-            return this.scale(1 / this.length());
+            var v = this.data;
+
+            var lengthSq = v[0] * v[0] + v[1] * v[1];
+            if (lengthSq > 0) {
+                var invLength = 1 / Math.sqrt(lengthSq);
+                v[0] *= invLength;
+                v[1] *= invLength;
+            }
+
+            return this;
         },
 
         /**
          * @function
          * @name pc.Vec2#scale
-         * @description Scales each dimension of the specified 2-dimensional vector by the supplied
+         * @description Scales each component of the specified 2-dimensional vector by the supplied
          * scalar value.
-         * @param {Number} scalar The value by which each vector dimension is multiplied.
+         * @param {Number} scalar The value by which each vector component is multiplied.
          * @returns {pc.Vec2} Self for chaining.
          * @example
          * var v = new pc.Vec2(2, 4);
@@ -312,8 +325,8 @@ pc.extend(pc, (function () {
          * @function
          * @name pc.Vec2#set
          * @description Sets the specified 2-dimensional vector to the supplied numerical values.
-         * @param {Number} x The value to set on the first dimension of the vector.
-         * @param {Number} y The value to set on the second dimension of the vector.
+         * @param {Number} x The value to set on the first component of the vector.
+         * @param {Number} y The value to set on the second component of the vector.
          * @example
          * var v = new pc.Vec2();
          * v.set(5, 10);

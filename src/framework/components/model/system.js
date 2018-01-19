@@ -1,4 +1,21 @@
 pc.extend(pc, function () {
+    var _schema = [
+        'enabled',
+        'type',
+        'asset',
+        'materialAsset',
+        'castShadows',
+        'receiveShadows',
+        'castShadowsLightmap',
+        'lightmapped',
+        'lightmapSizeMultiplier',
+        'isStatic',
+        'material',
+        'model',
+        'mapping',
+        'batchGroupId'
+    ];
+
     /**
      * @name pc.ModelComponentSystem
      * @description Create a new ModelComponentSystem
@@ -15,20 +32,7 @@ pc.extend(pc, function () {
         this.ComponentType = pc.ModelComponent;
         this.DataType = pc.ModelComponentData;
 
-        this.schema = [
-            'enabled',
-            'type',
-            'asset',
-            'materialAsset',
-            'castShadows',
-            'receiveShadows',
-            'castShadowsLightmap',
-            'lightmapped',
-            'lightmapSizeMultiplier',
-            'material',
-            'model',
-            'mapping'
-        ];
+        this.schema = _schema;
 
         var gd = app.graphicsDevice;
         this.box = pc.createBox(gd, {
@@ -62,12 +66,17 @@ pc.extend(pc, function () {
     };
     ModelComponentSystem = pc.inherits(ModelComponentSystem, pc.ComponentSystem);
 
+    pc.Component._buildAccessors(pc.ModelComponent.prototype, _schema);
+
     pc.extend(ModelComponentSystem.prototype, {
         initializeComponentData: function (component, data, properties) {
             data.material = this.defaultMaterial;
 
+            if (data.batchGroupId === null || data.batchGroupId === undefined)
+                data.batchGroupId = -1;
+
             // order matters here
-            properties = ['enabled', 'material', 'materialAsset', 'asset', 'castShadows', 'receiveShadows', 'castShadowsLightmap', 'lightmapped', 'lightmapSizeMultiplier', 'type', 'mapping'];
+            properties = ['enabled', 'material', 'materialAsset', 'asset', 'castShadows', 'receiveShadows', 'castShadowsLightmap', 'lightmapped', 'lightmapSizeMultiplier', 'type', 'mapping', 'isStatic', 'batchGroupId'];
 
             ModelComponentSystem._super.initializeComponentData.call(this, component, data, properties);
         },
@@ -93,7 +102,9 @@ pc.extend(pc, function () {
                 castShadowsLightmap: entity.model.castShadowsLightmap,
                 lightmapped: entity.model.lightmapped,
                 lightmapSizeMultiplier: entity.model.lightmapSizeMultiplier,
+                isStatic: entity.model.isStatic,
                 enabled: entity.model.enabled,
+                batchGroupId: entity.model.batchGroupId,
                 mapping: pc.extend({}, entity.model.mapping)
             };
 
@@ -124,12 +135,15 @@ pc.extend(pc, function () {
                 var meshInstancesClone = component.model.meshInstances;
                 for (var i = 0; i < meshInstances.length; i++) {
                     meshInstancesClone[i].mask = meshInstances[i].mask;
+                    meshInstancesClone[i].material = meshInstances[i].material;
+                    meshInstancesClone[i].layer = meshInstances[i].layer;
+                    meshInstancesClone[i].receiveShadow = meshInstances[i].receiveShadow;
                 }
             }
         },
 
-        onRemove: function(entity, data) {
-            data.remove();
+        onRemove: function(entity, component) {
+            component.remove();
         }
     });
 

@@ -1,6 +1,26 @@
 pc.extend(pc, function () {
     'use strict';
 
+    // temporary object for creating
+    // instances
+    var instanceOptions = {
+        volume: 0,
+        pitch: 0,
+        loop: false,
+        startTime: 0,
+        duration: 0,
+        position: new pc.Vec3(),
+        maxDistance: 0,
+        refDistance: 0,
+        rollOffFactor: 0,
+        distanceModel: 0,
+        onPlay: null,
+        onPause: null,
+        onResume: null,
+        onStop: null,
+        onEnd: null
+    };
+
     /**
      * @name pc.SoundSlot
      * @class The SoundSlot controls playback of an audio asset.
@@ -26,7 +46,7 @@ pc.extend(pc, function () {
      * @property {Boolean} loop If true the slot will restart when it finishes playing
      * @property {Boolean} overlap If true then sounds played from slot will be played independently of each other. Otherwise the slot will first stop the current sound before starting the new one.
      * @property {Boolean} isLoaded Returns true if the asset of the slot is loaded.
-     * @property {Boolean} isPlaying  Returns true if the slot is currently playing.
+     * @property {Boolean} isPlaying Returns true if the slot is currently playing.
      * @property {Boolean} isPaused Returns true if the slot is currently paused.
      * @property {Boolean} isStopped Returns true if the slot is currently stopped.
      * @property {pc.SoundInstance[]} instances An array that contains all the {@link pc.SoundInstance}s currently being played by the slot.
@@ -51,6 +71,12 @@ pc.extend(pc, function () {
         if (this._asset instanceof pc.Asset) {
             this._asset = this._asset.id;
         }
+
+        this._onInstancePlayHandler = this._onInstancePlay.bind(this);
+        this._onInstancePauseHandler = this._onInstancePause.bind(this);
+        this._onInstanceResumeHandler = this._onInstanceResume.bind(this);
+        this._onInstanceStopHandler = this._onInstanceStop.bind(this);
+        this._onInstanceEndHandler = this._onInstanceEnd.bind(this);
 
         this.instances = [];
 
@@ -77,9 +103,10 @@ pc.extend(pc, function () {
             // if not loaded then load first
             // and then set sound resource on the created instance
             if (! this.isLoaded) {
-                var onLoad = function (slot, sound) {
+                var onLoad = function (sound) {
+                    var playWhenLoaded = instance._playWhenLoaded;
                     instance.sound = sound;
-                    if (instance._playWhenLoaded) {
+                    if (playWhenLoaded) {
                         instance.play();
                     }
                 };
@@ -91,14 +118,12 @@ pc.extend(pc, function () {
                 instance.play();
             }
 
-            this.fire('play', this, instance);
-
             return instance;
         },
 
         /**
          * @function
-         * @name  pc.SoundSlot#pause
+         * @name pc.SoundSlot#pause
          * @description Pauses all sound instances. To continue playback call {@link pc.SoundSlot#resume}.
          */
         pause: function () {
@@ -111,16 +136,12 @@ pc.extend(pc, function () {
                 }
             }
 
-            if (paused) {
-                this.fire('pause', this);
-            }
-
             return paused;
         },
 
         /**
          * @function
-         * @name  pc.SoundSlot#resume
+         * @name pc.SoundSlot#resume
          * @description Resumes playback of all paused sound instances.
          * @returns {Boolean} True if any instances were resumed.
          */
@@ -132,16 +153,12 @@ pc.extend(pc, function () {
                     resumed = true;
             }
 
-            if (resumed) {
-                this.fire('resume', this);
-            }
-
             return resumed;
         },
 
         /**
          * @function
-         * @name  pc.SoundSlot#stop
+         * @name pc.SoundSlot#stop
          * @description Stops playback of all sound instances.
          * @returns {Boolean} True if any instances were stopped.
          */
@@ -155,16 +172,12 @@ pc.extend(pc, function () {
 
             instances.length = 0;
 
-            if (stopped) {
-                this.fire('stop', this);
-            }
-
             return stopped;
         },
 
         /**
          * @function
-         * @name  pc.SoundSlot#load
+         * @name pc.SoundSlot#load
          * @description Loads the asset assigned to this slot.
          */
         load: function () {
@@ -190,16 +203,16 @@ pc.extend(pc, function () {
                 return;
             }
 
-            this.fire('load', this, asset.resource);
+            this.fire('load', asset.resource);
         },
 
         /**
          * @function
-         * @name  pc.SoundSlot#setExternalNodes
+         * @name pc.SoundSlot#setExternalNodes
          * @description Connect external Web Audio API nodes. Any sound played by this slot will
          * automatically attach the specified nodes to the source that plays the sound. You need to pass
          * the first node of the node graph that you created externally and the last node of that graph. The first
-         * node will be connected to the audio source and the last node will be connected to the destination of the AudioContext (e.g speakers).
+         * node will be connected to the audio source and the last node will be connected to the destination of the AudioContext (e.g. speakers).
          * @param {AudioNode} firstNode The first node that will be connected to the audio source of sound instances.
          * @param {AudioNode} [lastNode] The last node that will be connected to the destination of the AudioContext.
          * If unspecified then the firstNode will be connected to the destination instead.
@@ -276,7 +289,7 @@ pc.extend(pc, function () {
         /**
          * @function
          * @private
-         * @name pc.SoundSlot#_createInstane
+         * @name pc.SoundSlot#_createInstance
          * @description Creates a new pc.SoundInstance with the properties of the slot.
          * @returns {pc.SoundInstance} The new instance
          */
@@ -296,16 +309,21 @@ pc.extend(pc, function () {
             }
 
             // initialize instance options
-            var data = {
-                volume: this._volume * component.volume,
-                pitch: this._pitch * component.pitch,
-                loop: this._loop,
-                startTime: this._startTime,
-                duration: this._duration
-            };
+            var data = instanceOptions;
+            data.volume = this._volume * component.volume;
+            data.pitch = this._pitch * component.pitch;
+            data.loop = this._loop;
+            data.startTime = this._startTime;
+            data.duration = this._duration;
+
+            data.onPlay = this._onInstancePlayHandler;
+            data.onPause = this._onInstancePauseHandler;
+            data.onResume = this._onInstanceResumeHandler;
+            data.onStop = this._onInstanceStopHandler;
+            data.onEnd = this._onInstanceEndHandler;
 
             if (component.positional) {
-                data.position = component.entity.getPosition();
+                data.position.copy(component.entity.getPosition());
                 data.maxDistance = component.maxDistance;
                 data.refDistance = component.refDistance;
                 data.rollOffFactor = component.rollOffFactor;
@@ -316,8 +334,6 @@ pc.extend(pc, function () {
                 instance = new pc.SoundInstance(this._manager, sound, data);
             }
 
-            instance.once('end', this._onInstanceEnd, this);
-
             // hook external audio nodes
             if (this._firstNode) {
                 instance.setExternalNodes(this._firstNode, this._lastNode);
@@ -326,12 +342,50 @@ pc.extend(pc, function () {
             return instance;
         },
 
+        _onInstancePlay: function (instance) {
+            // propagate event to slot
+            this.fire('play', instance);
+
+            // propagate event to component
+            this._component.fire('play', this, instance);
+        },
+
+        _onInstancePause: function (instance) {
+            // propagate event to slot
+            this.fire('pause', instance);
+
+            // propagate event to component
+            this._component.fire('pause', this, instance);
+        },
+
+        _onInstanceResume: function (instance) {
+            // propagate event to slot
+            this.fire('resume', instance);
+
+            // propagate event to component
+            this._component.fire('resume', this, instance);
+        },
+
+        _onInstanceStop: function (instance) {
+            // propagate event to slot
+            this.fire('stop', instance);
+
+            // propagate event to component
+            this._component.fire('stop', this, instance);
+        },
+
         _onInstanceEnd: function (instance) {
             // remove instance that ended
             var idx = this.instances.indexOf(instance);
             if (idx !== -1) {
                 this.instances.splice(idx, 1);
             }
+
+            // propagate event to slot
+            this.fire('end', instance);
+
+            // propagate event to component
+            this._component.fire('end', this, instance);
         },
 
         _onAssetAdd: function (asset) {
@@ -467,7 +521,7 @@ pc.extend(pc, function () {
             // != intentional
             if (this._duration != null) {
                 return this._duration % (assetDuration || 1);
-            } else  {
+            } else {
                 return assetDuration;
             }
         },
@@ -572,41 +626,39 @@ pc.extend(pc, function () {
 }());
 
 
-//**** Events Documentation *****//
+// Events Documentation
 
 /**
 * @event
 * @name pc.SoundSlot#play
-* @description Fired when the slot starts playing
-* @param {pc.SoundSlot} slot The slot
-* @param {pc.SoundInstance} instance The instance created to play the sound
+* @description Fired when a sound instance starts playing
+* @param {pc.SoundInstance} instance The instance that started playing
 */
 
 /**
 * @event
 * @name pc.SoundSlot#pause
-* @description Fired when the slot is paused.
-* @param {pc.SoundSlot} slot The slot
+* @description Fired when a sound instance is paused.
+* @param {pc.SoundInstance} instance The instance that was paused created to play the sound
 */
 
 /**
 * @event
 * @name pc.SoundSlot#resume
-* @description Fired when the slot is resumed.
-* @param {pc.SoundSlot} slot The slot
+* @description Fired when a sound instance is resumed..
+* @param {pc.SoundInstance} instance The instance that was resumed
 */
 
 /**
 * @event
 * @name pc.SoundSlot#stop
-* @description Fired when the slot is stopped.
-* @param {pc.SoundSlot} slot The slot
+* @description Fired when a sound instance is stopped.
+* @param {pc.SoundInstance} instance The instance that was stopped
 */
 
 /**
 * @event
 * @name pc.SoundSlot#load
 * @description Fired when the asset assigned to the slot is loaded
-* @param {pc.SoundSlot} slot The slot
 * @param {pc.Sound} sound The sound resource that was loaded
 */

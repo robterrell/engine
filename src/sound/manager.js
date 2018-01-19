@@ -28,11 +28,13 @@ pc.extend(pc, function () {
      * @class The SoundManager is used to load and play audio. As well as apply system-wide settings
      * like global volume, suspend and resume.
      * @description Creates a new sound manager.
+     * @param {Object} [options]
+     * @param {Boolean} [options.forceWebAudioApi] Always use the Web Audio API even check indicates that it if not available
      * @property {pc.Listener} listener Gets / sets the audio listener
      * @property {Number} volume Global volume for the manager. All {@link pc.SoundInstance}s will scale their volume with this volume. Valid between [0, 1].
      */
-    var SoundManager = function () {
-        if (hasAudioContext()) {
+    var SoundManager = function (options) {
+        if (hasAudioContext() || options.forceWebAudioApi) {
             if (typeof AudioContext !== 'undefined') {
                 this.context = new AudioContext();
             } else if (typeof webkitAudioContext !== 'undefined') {
@@ -42,8 +44,7 @@ pc.extend(pc, function () {
             if (this.context) {
                 var context = this.context;
                 // iOS only starts sound as a response to user interaction
-                var iOS = /iPad|iPhone|iPod/.test(navigator.platform);
-                if (iOS) {
+                if (pc.platform.ios) {
                     // Play an inaudible sound when the user touches the screen
                     // This only happens once
                     var unlock = function () {

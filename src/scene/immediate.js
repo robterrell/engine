@@ -5,6 +5,8 @@ pc.extend(pc.Application.prototype, function () {
     var quadMesh = null;
     var cubeLocalPos = null;
     var cubeWorldPos = null;
+    var tempGraphNode = new pc.GraphNode();
+    var identityGraphNode = new pc.GraphNode();
 
     var lineBatch = function () {
         // Sensible default value; buffers will be doubled and reallocated when it's not enough
@@ -47,8 +49,9 @@ pc.extend(pc.Application.prototype, function () {
                 this.vbRam = new DataView(this.vb.lock());
 
                 if (!this.meshInstance) {
-                    var node = {worldTransform: pc.Mat4.IDENTITY};
-                    this.meshInstance = new pc.MeshInstance(node, this.mesh, this.material);
+                    identityGraphNode.worldTransform = pc.Mat4.IDENTITY;
+                    identityGraphNode._dirtyWorld = identityGraphNode._dirtyNormal = false;
+                    this.meshInstance = new pc.MeshInstance(identityGraphNode, this.mesh, this.material);
                 }
             }
         },
@@ -86,8 +89,8 @@ pc.extend(pc.Application.prototype, function () {
         // Init global line drawing data once
         if (!lineVertexFormat) {
             lineVertexFormat = new pc.VertexFormat(this.graphicsDevice, [
-                    { semantic: pc.SEMANTIC_POSITION, components: 3, type: pc.ELEMENTTYPE_FLOAT32 },
-                    { semantic: pc.SEMANTIC_COLOR, components: 4, type: pc.ELEMENTTYPE_UINT8, normalize: true }
+                    { semantic: pc.SEMANTIC_POSITION, components: 3, type: pc.TYPE_FLOAT32 },
+                    { semantic: pc.SEMANTIC_COLOR, components: 4, type: pc.TYPE_UINT8, normalize: true }
                 ]);
             this.on('prerender', this._preRenderImmediate, this);
         }
@@ -150,7 +153,7 @@ pc.extend(pc.Application.prototype, function () {
      * var start = new pc.Vec3(0,0,0);
      * var end = new pc.Vec3(1,0,0);
      * var color = new pc.Color(1,1,1);
-     * app.renderLine(start, end, startColor, color, pc.LINEBATCH_OVERLAY);
+     * app.renderLine(start, end, color, pc.LINEBATCH_OVERLAY);
      */
     /**
      * @function
@@ -164,8 +167,9 @@ pc.extend(pc.Application.prototype, function () {
      * @example
      * var start = new pc.Vec3(0,0,0);
      * var end = new pc.Vec3(1,0,0);
-     * var color = new pc.Color(1,1,1);
-     * app.renderLine(start, end, startColor, startColor, endColor, pc.LINEBATCH_OVERLAY);
+     * var startColor = new pc.Color(1,1,1);
+     * var endColor = new pc.Color(1,0,0);
+     * app.renderLine(start, end, startColor, endColor, pc.LINEBATCH_OVERLAY);
      */
     function renderLine(start, end, color, arg3, arg4) {
         var endColor = color;
@@ -258,8 +262,9 @@ pc.extend(pc.Application.prototype, function () {
 
     // Draw mesh at this frame
     function renderMesh(mesh, material, matrix) {
-        var node = {worldTransform: matrix};
-        var instance = new pc.MeshInstance(node, mesh, material);
+        tempGraphNode.worldTransform = matrix;
+        tempGraphNode._dirtyWorld = tempGraphNode._dirtyNormal = false;
+        var instance = new pc.MeshInstance(tempGraphNode, mesh, material);
         this.scene.immediateDrawCalls.push(instance);
     }
 
@@ -269,7 +274,7 @@ pc.extend(pc.Application.prototype, function () {
         // Init quad data once
         if (!quadMesh) {
             var format = new pc.VertexFormat(this.graphicsDevice, [
-                    { semantic: pc.SEMANTIC_POSITION, components: 3, type: pc.ELEMENTTYPE_FLOAT32 }
+                    { semantic: pc.SEMANTIC_POSITION, components: 3, type: pc.TYPE_FLOAT32 }
                 ]);
             var quadVb = new pc.VertexBuffer(this.graphicsDevice, format, 4);
             var iterator = new pc.VertexIterator(quadVb);
@@ -289,8 +294,9 @@ pc.extend(pc.Application.prototype, function () {
             quadMesh.primitive[0].indexed = false;
         }
         // Issue quad drawcall
-        var node = {worldTransform: matrix};
-        var quad = new pc.MeshInstance(node, quadMesh, material);
+        tempGraphNode.worldTransform = matrix;
+        tempGraphNode._dirtyWorld = tempGraphNode._dirtyNormal = false;
+        var quad = new pc.MeshInstance(tempGraphNode, quadMesh, material);
         if (layer) quad.layer = layer;
         this.scene.immediateDrawCalls.push(quad);
     }

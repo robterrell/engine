@@ -34,7 +34,8 @@ pc.extend(pc, function() {
         'animTilesY',
         'animFrames',
         'animLoop',
-        'colorMap'
+        'colorMap',
+        'localSpace'
     ];
 
     var GRAPH_PROPERTIES = [
@@ -74,11 +75,11 @@ pc.extend(pc, function() {
      * Particle rotation is specified by a single angle parameter: default billboard particles rotate around camera facing axis, while mesh particles rotate around 2 different view-independent axes.
      * Most of the simulation parameters are specified with pc.Curve or pc.CurveSet. Curves are interpolated based on each particle's lifetime, therefore parameters are able to change over time.
      * Most of the curve parameters can also be specified by 2 minimum/maximum curves, this way each particle will pick a random value in-between.
-     * @param {pc.ParticleSystemComponent} system The ComponentSystem that created this Component
+     * @param {pc.ParticleSystemComponentSystem} system The ComponentSystem that created this Component
      * @param {pc.Entity} entity The Entity this Component is attached to
      * @extends pc.Component
+     * @property {Boolean} autoPlay Controls whether the particle system plays automatically on creation. If set to false, it is necessary to call {@link pc.ParticleSystemComponent#play} for the particle system to play. Defaults to true.
      * @property {Boolean} loop Enables or disables respawning of particles.
-     * @property {Boolean} paused Pauses or unpauses the simulation.
      * @property {Boolean} preWarm If enabled, the particle system will be initialized as though it had already completed a full cycle. This only works with looping particle systems.
      * @property {Boolean} lighting If enabled, particles will be lit by ambient and directional lights.
      * @property {Boolean} halfLambert Enabling Half Lambert lighting avoids particles looking too flat in shadowed areas. It is a completely non-physical lighting model but can give more pleasing visual results.
@@ -88,8 +89,8 @@ pc.extend(pc, function() {
      * @property {Number} numParticles Maximum number of simulated particles.
      * @property {Number} rate Minimal interval in seconds between particle births.
      * @property {Number} rate2 Maximal interval in seconds between particle births.
-     * @property {Number} startAngle Minimal inital Euler angle of a particle.
-     * @property {Number} startAngle2 Maximal inital Euler angle of a particle.
+     * @property {Number} startAngle Minimal initial Euler angle of a particle.
+     * @property {Number} startAngle2 Maximal initial Euler angle of a particle.
      * @property {Number} lifetime The length of time in seconds between a particle's birth and its death.
      * @property {Number} stretch A value in world units that controls the amount by which particles are stretched based on their velocity. Particles are stretched from their center towards their previous position.
      * @property {Number} intensity Color multiplier.
@@ -408,7 +409,7 @@ pc.extend(pc, function() {
             }
 
             var firstRun = false;
-            if (!this.emitter && !this.system._inTools) {
+            if (! this.emitter) {
 
                 var mesh = this.data.mesh;
                 // mesh might be an asset id of an asset
@@ -424,6 +425,7 @@ pc.extend(pc, function() {
                     emitterShape: this.data.emitterShape,
                     initialVelocity: this.data.initialVelocity,
                     wrap: this.data.wrap,
+                    localSpace: this.data.localSpace,
                     wrapBounds: this.data.wrapBounds,
                     lifetime: this.data.lifetime,
                     rate: this.data.rate,

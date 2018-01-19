@@ -7,7 +7,11 @@
 pc.script = (function () {
     var _main = null;
     var _loader = null;
-    var _legacy = true;
+    var _legacy = false;
+
+    // flag to avoid creating multiple loading screens e.g. when
+    // loading screen scripts are reloaded
+    var _createdLoadingScreen = false;
 
     var script = {
         // set during script load to be used for initializing script
@@ -17,7 +21,7 @@ pc.script = (function () {
          * @function
          * @name pc.script.create
          * @description Create a script resource object. A script file should contain a single call to pc.script.create and the callback should return a script object which will be
-         * instanciated when attached to Entities.
+         * instantiated when attached to Entities.
          * @param {String} name The name of the script object.
          * @param {Function} callback The callback function which is passed an {pc.Application} object,
          * which is used to access Entities and Components, and should return the Type of the script resource
@@ -123,6 +127,11 @@ pc.script = (function () {
          * });
          */
         createLoadingScreen: function (callback) {
+            if (_createdLoadingScreen)
+                return;
+
+            _createdLoadingScreen = true;
+
             var app = pc.Application.getApplication();
             callback(app);
         }

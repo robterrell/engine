@@ -107,6 +107,7 @@ pc.calculateTangents = function (positions, normals, uvs, indices) {
     var tan2 = new Float32Array(vertexCount * 3);
 
     var tangents = [];
+    var area = 0.0;
 
     for (i = 0; i < triangleCount; i++) {
         i1 = indices[i * 3];
@@ -133,13 +134,22 @@ pc.calculateTangents = function (positions, normals, uvs, indices) {
         t1 = w2.y - w1.y;
         t2 = w3.y - w1.y;
 
-        r = 1.0 / (s1 * t2 - s2 * t1);
-        sdir.set((t2 * x1 - t1 * x2) * r,
-                 (t2 * y1 - t1 * y2) * r,
-                 (t2 * z1 - t1 * z2) * r);
-        tdir.set((s1 * x2 - s2 * x1) * r,
-                 (s1 * y2 - s2 * y1) * r,
-                 (s1 * z2 - s2 * z1) * r);
+        area = s1 * t2 - s2 * t1;
+
+        //area can 0.0 for degenerate triangles or bad uv coordinates
+        if (area == 0.0) {
+            //fallback to default values
+            sdir.set(0.0, 1.0, 0.0);
+            tdir.set(1.0, 0.0, 0.0);
+        } else {
+            r = 1.0 / area;
+            sdir.set((t2 * x1 - t1 * x2) * r,
+                    (t2 * y1 - t1 * y2) * r,
+                    (t2 * z1 - t1 * z2) * r);
+            tdir.set((s1 * x2 - s2 * x1) * r,
+                    (s1 * y2 - s2 * y1) * r,
+                    (s1 * z2 - s2 * z1) * r);
+        }
 
         tan1[i1 * 3 + 0] += sdir.x;
         tan1[i1 * 3 + 1] += sdir.y;
@@ -217,31 +227,40 @@ pc.calculateTangents = function (positions, normals, uvs, indices) {
  */
 pc.createMesh = function (device, positions, opts) {
     // Check the supplied options and provide defaults for unspecified ones
-    var normals = opts && opts.normals !== undefined ? opts.normals : null;
-    var tangents = opts && opts.tangents !== undefined ? opts.tangents : null;
-    var colors = opts && opts.colors !== undefined ? opts.colors : null;
-    var uvs = opts && opts.uvs !== undefined ? opts.uvs : null;
-    var uvs1 = opts && opts.uvs1 !== undefined ? opts.uvs1 : null;
-    var indices = opts && opts.indices !== undefined ? opts.indices : null;
+    var normals      = opts && opts.normals !== undefined ? opts.normals : null;
+    var tangents     = opts && opts.tangents !== undefined ? opts.tangents : null;
+    var colors       = opts && opts.colors !== undefined ? opts.colors : null;
+    var uvs          = opts && opts.uvs !== undefined ? opts.uvs : null;
+    var uvs1         = opts && opts.uvs1 !== undefined ? opts.uvs1 : null;
+    var indices      = opts && opts.indices !== undefined ? opts.indices : null;
+    var blendIndices = opts && opts.blendIndices !== undefined ? opts.blendIndices : null;
+    var blendWeights = opts && opts.blendWeights !== undefined ? opts.blendWeights : null;
 
     var vertexDesc = [
-        { semantic: pc.SEMANTIC_POSITION, components: 3, type: pc.ELEMENTTYPE_FLOAT32 }
+        { semantic: pc.SEMANTIC_POSITION, components: 3, type: pc.TYPE_FLOAT32 }
     ];
     if (normals !== null) {
-        vertexDesc.push({ semantic: pc.SEMANTIC_NORMAL, components: 3, type: pc.ELEMENTTYPE_FLOAT32 });
+        vertexDesc.push({ semantic: pc.SEMANTIC_NORMAL, components: 3, type: pc.TYPE_FLOAT32 });
     }
     if (tangents !== null) {
-        vertexDesc.push({ semantic: pc.SEMANTIC_TANGENT, components: 4, type: pc.ELEMENTTYPE_FLOAT32 });
+        vertexDesc.push({ semantic: pc.SEMANTIC_TANGENT, components: 4, type: pc.TYPE_FLOAT32 });
     }
     if (colors !== null) {
-        vertexDesc.push({ semantic: pc.SEMANTIC_COLOR, components: 4, type: pc.ELEMENTTYPE_UINT8, normalize: true });
+        vertexDesc.push({ semantic: pc.SEMANTIC_COLOR, components: 4, type: pc.TYPE_UINT8, normalize: true });
     }
     if (uvs !== null) {
-        vertexDesc.push({ semantic: pc.SEMANTIC_TEXCOORD0, components: 2, type: pc.ELEMENTTYPE_FLOAT32 });
+        vertexDesc.push({ semantic: pc.SEMANTIC_TEXCOORD0, components: 2, type: pc.TYPE_FLOAT32 });
     }
     if (uvs1 !== null) {
-        vertexDesc.push({ semantic: pc.SEMANTIC_TEXCOORD1, components: 2, type: pc.ELEMENTTYPE_FLOAT32 });
+        vertexDesc.push({ semantic: pc.SEMANTIC_TEXCOORD1, components: 2, type: pc.TYPE_FLOAT32 });
     }
+    if (blendIndices !== null) {
+        vertexDesc.push({ semantic: pc.SEMANTIC_BLENDINDICES, components: 2, type: pc.TYPE_UINT8 });
+    }
+    if (blendWeights !== null) {
+        vertexDesc.push({ semantic: pc.SEMANTIC_BLENDWEIGHT, components: 2, type: pc.TYPE_FLOAT32 });
+    }
+
     var vertexFormat = new pc.VertexFormat(device, vertexDesc);
 
     // Create the vertex buffer
@@ -266,6 +285,12 @@ pc.createMesh = function (device, positions, opts) {
         }
         if (uvs1 !== null) {
             iterator.element[pc.SEMANTIC_TEXCOORD1].set(uvs1[i*2], uvs1[i*2+1]);
+        }
+        if(blendIndices !== null) {
+            iterator.element[pc.SEMANTIC_BLENDINDICES].set(blendIndices[i*2], blendIndices[i*2+1]);
+        }
+        if(blendWeights !== null) {
+            iterator.element[pc.SEMANTIC_BLENDWEIGHT].set(blendWeights[i*2], blendWeights[i*2+1]);
         }
         iterator.next();
     }
@@ -614,13 +639,19 @@ pc._createConeData = function (baseRadius, peakRadius, height, heightSegments, c
  */
 pc.createCylinder = function (device, opts) {
     // Check the supplied options and provide defaults for unspecified ones
-    var baseRadius = opts && opts.baseRadius !== undefined ? opts.baseRadius : 0.5;
+    // #ifdef DEBUG
+    if (opts && opts.hasOwnProperty('baseRadius') && !opts.hasOwnProperty('radius'))
+      console.warn('DEPRECATED: "baseRadius" in arguments, use "radius" instead');
+    // #endif
+
+    var radius = opts && (opts.radius || opts.baseRadius);
+    radius = radius !== undefined ? radius : 0.5;
     var height = opts && opts.height !== undefined ? opts.height : 1.0;
     var heightSegments = opts && opts.heightSegments !== undefined ? opts.heightSegments : 5;
     var capSegments = opts && opts.capSegments !== undefined ? opts.capSegments : 20;
 
     // Create vertex data for a cone that has a base and peak radius that is the same (i.e. a cylinder)
-    var options = pc._createConeData(baseRadius, baseRadius, height, heightSegments, capSegments, false);
+    var options = pc._createConeData(radius, radius, height, heightSegments, capSegments, false);
 
     if (pc.precalculatedTangents) {
         options.tangents = pc.calculateTangents(options.positions, options.normals, options.uvs, options.indices);
@@ -951,7 +982,7 @@ pc.createBox = function (device, opts) {
                 v /= 3;
                 u = u * primitiveUv1PaddingScale + primitiveUv1Padding;
                 v = v * primitiveUv1PaddingScale + primitiveUv1Padding;
-                u += (side % 3) / 3
+                u += (side % 3) / 3;
                 v += Math.floor(side / 3) / 3;
                 uvs1.push(u, v);
 

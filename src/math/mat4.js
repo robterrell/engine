@@ -1,16 +1,54 @@
 pc.extend(pc, (function () {
     'use strict';
 
+    var typeNumber = 'number';
+
     /**
     * @name pc.Mat4
     * @class A 4x4 matrix.
     * @description Creates a new Mat4 object
+    * @param {Number} [v0] The value in row 0, column 0. If v0 is an array of length 16, the array will be used to populate all components.
+    * @param {Number} [v1] The value in row 1, column 0.
+    * @param {Number} [v2] The value in row 2, column 0.
+    * @param {Number} [v3] The value in row 3, column 0.
+    * @param {Number} [v4] The value in row 0, column 1.
+    * @param {Number} [v5] The value in row 1, column 1.
+    * @param {Number} [v6] The value in row 2, column 1.
+    * @param {Number} [v7] The value in row 3, column 1.
+    * @param {Number} [v8] The value in row 0, column 2.
+    * @param {Number} [v9] The value in row 1, column 2.
+    * @param {Number} [v10] The value in row 2, column 2.
+    * @param {Number} [v11] The value in row 3, column 2.
+    * @param {Number} [v12] The value in row 0, column 3.
+    * @param {Number} [v13] The value in row 1, column 3.
+    * @param {Number} [v14] The value in row 2, column 3.
+    * @param {Number} [v15] The value in row 3, column 3.
     */
-    var Mat4 = function () {
+    var Mat4 = function (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15) {
+        if (v0 && v0.length === 16) {
+            this.data = new Float32Array(v0);
+            return;
+        }
+
         this.data = new Float32Array(16);
 
-        if (arguments.length === 16) {
-            this.data.set(arguments);
+        if (typeof(v0) === typeNumber) {
+            this.data[0] = v0;
+            this.data[1] = v1;
+            this.data[2] = v2;
+            this.data[3] = v3;
+            this.data[4] = v4;
+            this.data[5] = v5;
+            this.data[6] = v6;
+            this.data[7] = v7;
+            this.data[8] = v8;
+            this.data[9] = v9;
+            this.data[10] = v10;
+            this.data[11] = v11;
+            this.data[12] = v12;
+            this.data[13] = v13;
+            this.data[14] = v14;
+            this.data[15] = v15;
         } else {
             this.setIdentity();
         }
@@ -81,9 +119,8 @@ pc.extend(pc, (function () {
          * @returns {pc.Mat4} A duplicate matrix.
          * @example
          * var src = new pc.Mat4().setFromEulerAngles(10, 20, 30);
-         * var dst = new pc.Mat4();
-         * dst.copy(src);
-         * console.log("The two matrices are " + (src.equal(dst) ? "equal" : "different"));
+         * var dst = src.clone();
+         * console.log("The two matrices are " + (src.equals(dst) ? "equal" : "different"));
          */
         clone: function () {
             return new pc.Mat4().copy(this);
@@ -99,7 +136,7 @@ pc.extend(pc, (function () {
          * var src = new pc.Mat4().setFromEulerAngles(10, 20, 30);
          * var dst = new pc.Mat4();
          * dst.copy(src);
-         * console.log("The two matrices are " + (src.equal(dst) ? "equal" : "different"));
+         * console.log("The two matrices are " + (src.equals(dst) ? "equal" : "different"));
          */
         copy: function (rhs) {
             var src = rhs.data,
@@ -374,6 +411,57 @@ pc.extend(pc, (function () {
 
         /**
          * @function
+         * @name pc.Mat4#transformVec4
+         * @description Transforms a 4-dimensional vector by a 4x4 matrix.
+         * @param {pc.Vec4} vec The 4-dimensional vector to be transformed.
+         * @param {pc.Vec4} [res] An optional 4-dimensional vector to receive the result of the transformation.
+         * @returns {pc.Vec4} The input vector v transformed by the current instance.
+         * @example
+         * // Create an input 4-dimensional vector
+         * var v = new pc.Vec4(1, 2, 3, 4);
+         *
+         * // Create an output 4-dimensional vector
+         * var result = new pc.Vec4();
+         *
+         * // Create a 4x4 rotation matrix
+         * var m = new pc.Mat4().setFromEulerAngles(10, 20, 30);
+         *
+         * m.transformVec4(v, result);
+         */
+        transformVec4: function (vec, res) {
+            var x, y, z, w,
+                m = this.data,
+                v = vec.data;
+
+            res = (res === undefined) ? new pc.Vec4() : res;
+
+            x =
+                v[0] * m[0] +
+                v[1] * m[4] +
+                v[2] * m[8] +
+                v[3] * m[12];
+            y =
+                v[0] * m[1] +
+                v[1] * m[5] +
+                v[2] * m[9] +
+                v[3] * m[13];
+            z =
+                v[0] * m[2] +
+                v[1] * m[6] +
+                v[2] * m[10] +
+                v[3] * m[14];
+
+            w =
+                v[0] * m[3] +
+                v[1] * m[7] +
+                v[2] * m[11] +
+                v[3] * m[15];
+
+            return res.set(x, y, z, w);
+        },
+
+        /**
+         * @function
          * @name pc.Mat4#setLookAt
          * @description Sets the specified matrix to a viewing matrix derived from an eye point, a target point
          * and an up vector. The matrix maps the target point to the negative z-axis and the eye point to the
@@ -431,7 +519,7 @@ pc.extend(pc, (function () {
          * @private
          * @function
          * @name pc.Mat4#setFrustum
-         * @description Sets the specified matrix to a persective projection matrix. The function's parameters define
+         * @description Sets the specified matrix to a perspective projection matrix. The function's parameters define
          * the shape of a frustum.
          * @param {Number} left The x-coordinate for the left edge of the camera's projection plane in eye space.
          * @param {Number} right The x-coordinate for the right edge of the camera's projection plane in eye space.
@@ -441,7 +529,7 @@ pc.extend(pc, (function () {
          * @param {Number} zfar The far clip plane in eye coordinates.
          * @returns {pc.Mat4} Self for chaining.
          * @example
-         * // Create a 4x4 persepctive projection matrix
+         * // Create a 4x4 perspective projection matrix
          * var f = pc.Mat4().setFrustum(-2, 2, -1, 1, 1, 1000);
          */
         setFrustum: function (left, right, bottom, top, znear, zfar) {
@@ -476,7 +564,7 @@ pc.extend(pc, (function () {
         /**
          * @function
          * @name pc.Mat4#setPerspective
-         * @description Sets the specified matrix to a persective projection matrix. The function's
+         * @description Sets the specified matrix to a perspective projection matrix. The function's
          * parameters define the shape of a frustum.
          * @param {Number} fovy The field of view in the frustum in the Y-axis of eye space (or X axis if fovIsHorizontal is true).
          * @param {Number} aspect The aspect ratio of the frustum's projection plane (width / height).
@@ -484,7 +572,7 @@ pc.extend(pc, (function () {
          * @param {Number} zfar The far clip plane in eye coordinates.
          * @returns {pc.Mat4} Self for chaining.
          * @example
-         * // Create a 4x4 persepctive projection matrix
+         * // Create a 4x4 perspective projection matrix
          * var persp = pc.Mat4().setPerspective(45, 16 / 9, 1, 1000);
          */
         setPerspective: function (fovy, aspect, znear, zfar, fovIsHorizontal) {
@@ -679,7 +767,7 @@ pc.extend(pc, (function () {
                 b00, b01, b02, b03,
                 b04, b05, b06, b07,
                 b08, b09, b10, b11,
-                invDet, m;
+                det, invDet, m;
 
             m = this.data;
             a00 = m[0];
@@ -712,24 +800,61 @@ pc.extend(pc, (function () {
             b10 = a21 * a33 - a23 * a31;
             b11 = a22 * a33 - a23 * a32;
 
-            invDet = 1 / (b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06);
+            det = (b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06);
+            if (det === 0) {
+                // #ifdef DEBUG
+                console.warn("Can't invert matrix, determinant is 0");
+                // #endif
+                this.setIdentity();
+            } else {
+                invDet = 1 / det;
 
-            m[0] = (a11 * b11 - a12 * b10 + a13 * b09) * invDet;
-            m[1] = (-a01 * b11 + a02 * b10 - a03 * b09) * invDet;
-            m[2] = (a31 * b05 - a32 * b04 + a33 * b03) * invDet;
-            m[3] = (-a21 * b05 + a22 * b04 - a23 * b03) * invDet;
-            m[4] = (-a10 * b11 + a12 * b08 - a13 * b07) * invDet;
-            m[5] = (a00 * b11 - a02 * b08 + a03 * b07) * invDet;
-            m[6] = (-a30 * b05 + a32 * b02 - a33 * b01) * invDet;
-            m[7] = (a20 * b05 - a22 * b02 + a23 * b01) * invDet;
-            m[8] = (a10 * b10 - a11 * b08 + a13 * b06) * invDet;
-            m[9] = (-a00 * b10 + a01 * b08 - a03 * b06) * invDet;
-            m[10] = (a30 * b04 - a31 * b02 + a33 * b00) * invDet;
-            m[11] = (-a20 * b04 + a21 * b02 - a23 * b00) * invDet;
-            m[12] = (-a10 * b09 + a11 * b07 - a12 * b06) * invDet;
-            m[13] = (a00 * b09 - a01 * b07 + a02 * b06) * invDet;
-            m[14] = (-a30 * b03 + a31 * b01 - a32 * b00) * invDet;
-            m[15] = (a20 * b03 - a21 * b01 + a22 * b00) * invDet;
+                m[0] = (a11 * b11 - a12 * b10 + a13 * b09) * invDet;
+                m[1] = (-a01 * b11 + a02 * b10 - a03 * b09) * invDet;
+                m[2] = (a31 * b05 - a32 * b04 + a33 * b03) * invDet;
+                m[3] = (-a21 * b05 + a22 * b04 - a23 * b03) * invDet;
+                m[4] = (-a10 * b11 + a12 * b08 - a13 * b07) * invDet;
+                m[5] = (a00 * b11 - a02 * b08 + a03 * b07) * invDet;
+                m[6] = (-a30 * b05 + a32 * b02 - a33 * b01) * invDet;
+                m[7] = (a20 * b05 - a22 * b02 + a23 * b01) * invDet;
+                m[8] = (a10 * b10 - a11 * b08 + a13 * b06) * invDet;
+                m[9] = (-a00 * b10 + a01 * b08 - a03 * b06) * invDet;
+                m[10] = (a30 * b04 - a31 * b02 + a33 * b00) * invDet;
+                m[11] = (-a20 * b04 + a21 * b02 - a23 * b00) * invDet;
+                m[12] = (-a10 * b09 + a11 * b07 - a12 * b06) * invDet;
+                m[13] = (a00 * b09 - a01 * b07 + a02 * b06) * invDet;
+                m[14] = (-a30 * b03 + a31 * b01 - a32 * b00) * invDet;
+                m[15] = (a20 * b03 - a21 * b01 + a22 * b00) * invDet;
+            }
+            
+
+            return this;
+        },
+
+        /**
+         * @function
+         * @name pc.Mat4#set
+         * @description Sets matrix data from an array.
+         * @param {Array} Source array. Must have 16 values.
+         */
+        set: function (src) {
+            var dst = this.data;
+            dst[0] = src[0];
+            dst[1] = src[1];
+            dst[2] = src[2];
+            dst[3] = src[3];
+            dst[4] = src[4];
+            dst[5] = src[5];
+            dst[6] = src[6];
+            dst[7] = src[7];
+            dst[8] = src[8];
+            dst[9] = src[9];
+            dst[10] = src[10];
+            dst[11] = src[11];
+            dst[12] = src[12];
+            dst[13] = src[13];
+            dst[14] = src[14];
+            dst[15] = src[15];
 
             return this;
         },
@@ -741,7 +866,7 @@ pc.extend(pc, (function () {
          * @returns {pc.Mat4} Self for chaining.
          * @example
          * m.setIdentity();
-         * console.log("The two matrices are " + (src.equal(dst) ? "equal" : "different"));
+         * console.log("The matrix is " + (m.isIdentity() ? "identity" : "not identity"));
          */
         setIdentity: function () {
             var m = this.data;
@@ -780,7 +905,7 @@ pc.extend(pc, (function () {
          * var s = new pc.Vec3(2, 2, 2);
          *
          * var m = new pc.Mat4();
-         * m.compose(t, r, s);
+         * m.setTRS(t, r, s);
          */
         setTRS: function (t, r, s) {
             var tx, ty, tz, qx, qy, qz, qw, sx, sy, sz,
@@ -931,7 +1056,7 @@ pc.extend(pc, (function () {
         /**
          * @function
          * @name pc.Mat4#getTranslation
-         * @description Extracts the transational component from the specified 4x4 matrix.
+         * @description Extracts the translational component from the specified 4x4 matrix.
          * @param {pc.Vec3} [t] The vector to receive the translation of the matrix.
          * @returns {pc.Vec3} The translation of the specified 4x4 matrix.
          * @example

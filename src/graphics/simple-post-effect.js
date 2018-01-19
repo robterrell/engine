@@ -3,13 +3,19 @@ pc.extend(pc, (function () {
 
     // Draws shaded full-screen quad in a single call
     var _postEffectQuadVB = null;
+    var _postEffectQuadDraw = {
+        type: pc.PRIMITIVE_TRISTRIP,
+        base: 0,
+        count: 4,
+        indexed: false
+    };
 
-    function drawQuadWithShader(device, target, shader, rect, scissorRect) {
+    function drawQuadWithShader(device, target, shader, rect, scissorRect, useBlend) {
         if (_postEffectQuadVB === null) {
             var vertexFormat = new pc.VertexFormat(device, [{
                 semantic: pc.SEMANTIC_POSITION,
                 components: 2,
-                type: pc.ELEMENTTYPE_FLOAT32
+                type: pc.TYPE_FLOAT32
             }]);
             _postEffectQuadVB = new pc.VertexBuffer(device, vertexFormat, 4);
 
@@ -24,6 +30,7 @@ pc.extend(pc, (function () {
             iterator.end();
         }
 
+        var oldRt = device.renderTarget;
         device.setRenderTarget(target);
         device.updateBegin();
         var x, y, w, h;
@@ -57,29 +64,30 @@ pc.extend(pc, (function () {
 
         var oldDepthTest = device.getDepthTest();
         var oldDepthWrite = device.getDepthWrite();
+        var oldCull = device.getCullMode();
         device.setDepthTest(false);
         device.setDepthWrite(false);
-        device.setBlending(false);
+        device.setCullMode(pc.CULLFACE_NONE);
+        if (!useBlend) device.setBlending(false);
         device.setVertexBuffer(_postEffectQuadVB, 0);
         device.setShader(shader);
-        device.draw({
-            type: pc.PRIMITIVE_TRISTRIP,
-            base: 0,
-            count: 4,
-            indexed: false
-        });
+        device.draw(_postEffectQuadDraw);
         device.setDepthTest(oldDepthTest);
         device.setDepthWrite(oldDepthWrite);
+        device.setCullMode(oldCull);
         device.updateEnd();
+
+        device.setRenderTarget(oldRt);
+        device.updateBegin();
     }
 
-    function _deinitPostEffectQuad() {
+    function destroyPostEffectQuad() {
         _postEffectQuadVB = null;
     }
 
     return {
         drawQuadWithShader: drawQuadWithShader,
-        _deinitPostEffectQuad: _deinitPostEffectQuad
+        destroyPostEffectQuad: destroyPostEffectQuad,
     };
 }()));
 

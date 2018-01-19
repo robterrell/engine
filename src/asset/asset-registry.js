@@ -4,7 +4,7 @@ pc.extend(pc, function () {
     * @class Container for all assets that are available to this application
     * @description Create an instance of an AssetRegistry.
     * Note: PlayCanvas scripts are provided with an AssetRegistry instance as 'app.assets'.
-    * @param {pc.ResourceLoader} loader The ResourceLoader used to to load the asset files.
+    * @param {pc.ResourceLoader} loader The ResourceLoader used to load the asset files.
     * @property {String} prefix A URL prefix that will be added to all asset loading requests.
     */
     var AssetRegistry = function (loader) {
@@ -189,7 +189,7 @@ pc.extend(pc, function () {
             // name cache
             this._names[asset.name].push(index);
             if (asset.file) {
-                url = asset.getFileUrl();
+                url = asset.file.url;
                 this._urls[url] = index;
             }
             asset.registry = this;
@@ -220,7 +220,7 @@ pc.extend(pc, function () {
         remove: function (asset) {
             delete this._cache[asset.id];
             delete this._names[asset.name];
-            var url = asset.getFileUrl();
+            var url = asset.file ? asset.file.url : null;
             if (url)
                 delete this._urls[url];
 
@@ -299,25 +299,12 @@ pc.extend(pc, function () {
                 return;
             }
 
-            var load = !!(asset.file);
-            var open = !load;
+            var load = !! asset.file;
+
+            var file = asset.getPreferredFile();
 
             var _load = function () {
-                var url = asset.file.url;
-
-                // apply prefix if present
-                if (self.prefix) {
-                    if (url.startsWith('/')) {
-                        url = url.slice(1);
-                    }
-                    url = pc.path.join(self.prefix, url);
-                }
-
-                // add file hash to avoid caching
-                if (asset.type !== 'script' && asset.file.hash) {
-                    var separator = url.indexOf('?') !== -1 ? '&' : '?';
-                    url += separator + 't=' + asset.file.hash;
-                }
+                var url = asset.getFileUrl();
 
                 asset.loading = true;
 
@@ -340,7 +327,7 @@ pc.extend(pc, function () {
                     if (! pc.script.legacy && asset.type === 'script') {
                         var loader = self._loader.getHandler('script');
 
-                        if (loader._cache[asset.id]) {
+                        if (loader._cache[asset.id] && loader._cache[asset.id].parentNode === document.head) {
                             // remove old element
                             document.head.removeChild(loader._cache[asset.id]);
                         }
@@ -352,11 +339,10 @@ pc.extend(pc, function () {
 
                     self.fire("load", asset);
                     self.fire("load:" + asset.id, asset);
-                    if (asset.file && asset.file.url) {
-                        self.fire("load:url:" + asset.file.url, asset);
-                    }
+                    if (file && file.url)
+                        self.fire("load:url:" + file.url, asset);
                     asset.fire("load", asset);
-                });
+                }, asset);
             };
 
             var _open = function () {
@@ -372,20 +358,17 @@ pc.extend(pc, function () {
 
                 self.fire("load", asset);
                 self.fire("load:" + asset.id, asset);
-                if (asset.file && asset.file.url) {
-                    self.fire("load:url:" + asset.file.url, asset);
-                }
+                if (file && file.url)
+                    self.fire("load:url:" + file.url, asset);
                 asset.fire("load", asset);
             };
 
             // check for special case for cubemaps
-            if (asset.file && asset.type === "cubemap") {
+            if (file && asset.type === "cubemap") {
                 load = false;
-                open = false;
                 // loading prefiltered cubemap data
-                var url = asset.file.url;
-                var separator = url.indexOf('?') !== -1 ? '&' : '?';
-                url += separator + asset.file.hash;
+                var url = asset.getFileUrl();
+
                 this._loader.load(url, "texture", function (err, texture) {
                     if (!err) {
                         // Fudging an asset so that we can apply texture settings from the cubemap to the DDS texture
@@ -407,7 +390,7 @@ pc.extend(pc, function () {
                 });
             }
 
-            if (!asset.file) {
+            if (! file) {
                 _open();
             } else if (load) {
                 this.fire("load:start", asset);
@@ -468,8 +451,8 @@ pc.extend(pc, function () {
             var dir = pc.path.getDirectory(url);
             var basename = pc.path.getBasename(url);
             var name = basename.replace(".json", "");
+            var ext = pc.path.getExtension(url);
 
-            var mappingUrl = pc.path.join(dir, basename.replace(".json", ".mapping.json"));
 
             var _loadAsset = function (asset) {
                 asset.once("load", function (asset) {
@@ -481,18 +464,26 @@ pc.extend(pc, function () {
                 self.load(asset);
             };
 
-            this._loader.load(mappingUrl, 'json', function (err, data) {
-                if (err) {
-                    asset.data = {mapping: []};
-                    _loadAsset(asset);
-                    return;
-                }
+            if (ext === '.json') {
+                // playcanvas model format supports material mapping file
+                var mappingUrl = pc.path.join(dir, basename.replace(".json", ".mapping.json"));
+                this._loader.load(mappingUrl, 'json', function (err, data) {
+                    if (err) {
+                        asset.data = {mapping: []};
+                        _loadAsset(asset);
+                        return;
+                    }
 
-                self._loadMaterials(dir, data, function (err, materials) {
-                    asset.data = data;
-                    _loadAsset(asset);
+                    self._loadMaterials(dir, data, function (err, materials) {
+                        asset.data = data;
+                        _loadAsset(asset);
+                    });
                 });
-            });
+            } else {
+                // other model format (e.g. obj)
+                _loadAsset(asset);
+            }
+
         },
 
         // private method used for engine-only loading of model data
@@ -523,8 +514,7 @@ pc.extend(pc, function () {
                 var path = mapping.mapping[i].path;
                 if (path) {
                     self.loadFromUrl(pc.path.join(dir, path), "material", onLoadAsset);
-                }
-                 else {
+                } else {
                     count--;
                 }
             }
@@ -546,8 +536,9 @@ pc.extend(pc, function () {
                     var params = materials[i].data.parameters;
                     for (j = 0; j < params.length; j++) {
                         if (params[j].type === "texture") {
-                            var dir = pc.path.getDirectory(materials[i].getFileUrl());
-                            var url = pc.path.join(dir, params[j].data);
+                            var url = materials[i].getFileUrl();
+                            var dir = pc.path.getDirectory(url);
+                            url = pc.path.join(dir, params[j].data);
                             if (!used[url]) {
                                 used[url] = true;
                                 urls.push(url);

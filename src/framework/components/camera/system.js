@@ -1,10 +1,38 @@
 pc.extend(pc, function () {
+    var _schema = [
+        'enabled',
+        'clearColorBuffer',
+        'clearColor',
+        'clearDepthBuffer',
+        'clearStencilBuffer',
+        'frustumCulling',
+        'projection',
+        'fov',
+        'orthoHeight',
+        'nearClip',
+        'farClip',
+        'priority',
+        'rect',
+        'scissorRect',
+        'camera',
+        'aspectRatio',
+        'horizontalFov',
+        'model',
+        'renderTarget',
+        'calculateTransform',
+        'calculateProjection',
+        'cullFaces',
+        'flipFaces'
+    ];
+
     /**
      * @name pc.CameraComponentSystem
      * @class Used to add and remove {@link pc.CameraComponent}s from Entities. It also holds an
      * array of all active cameras.
      * @description Create a new CameraComponentSystem
      * @param {pc.Application} app The Application
+     *
+     * @property {pc.CameraComponent[]} cameras Holds all the active camera components
      * @extends pc.ComponentSystem
      */
     var CameraComponentSystem = function (app) {
@@ -15,33 +43,19 @@ pc.extend(pc, function () {
         this.ComponentType = pc.CameraComponent;
         this.DataType = pc.CameraComponentData;
 
-        this.schema = [
-            'enabled',
-            'clearColorBuffer',
-            'clearColor',
-            'clearDepthBuffer',
-            'frustumCulling',
-            'projection',
-            'fov',
-            'orthoHeight',
-            'nearClip',
-            'farClip',
-            'priority',
-            'rect',
-            'camera',
-            'aspectRatio',
-            'horizontalFov',
-            'model',
-            'renderTarget'
-        ];
+        this.schema = _schema;
 
         // holds all the active camera components
         this.cameras = [ ];
 
         this.on('beforeremove', this.onBeforeRemove, this);
         this.on('remove', this.onRemove, this);
+
+        pc.ComponentSystem.on('update', this.onUpdate, this);
     };
     CameraComponentSystem = pc.inherits(CameraComponentSystem, pc.ComponentSystem);
+
+    pc.Component._buildAccessors(pc.CameraComponent.prototype, _schema);
 
     pc.extend(CameraComponentSystem.prototype, {
         initializeComponentData: function (component, _data, properties) {
@@ -62,8 +76,14 @@ pc.extend(pc, function () {
                 'priority',
                 'clearColorBuffer',
                 'clearDepthBuffer',
+                'clearStencilBuffer',
                 'frustumCulling',
-                'rect'
+                'rect',
+                'scissorRect',
+                'calculateTransform',
+                'calculateProjection',
+                'cullFaces',
+                'flipFaces'
             ];
 
             // duplicate data because we're modifying the data
@@ -82,6 +102,11 @@ pc.extend(pc, function () {
                 data.rect = new pc.Vec4(rect[0], rect[1], rect[2], rect[3]);
             }
 
+            if (data.scissorRect && pc.type(data.scissorRect) === 'array') {
+                var scissorRect = data.scissorRect;
+                data.scissorRect = new pc.Vec4(scissorRect[0], scissorRect[1], scissorRect[2], scissorRect[3]);
+            }
+
             if (data.activate) {
                 console.warn("WARNING: activate: Property is deprecated. Set enabled property instead.");
                 data.enabled = data.activate;
@@ -89,6 +114,20 @@ pc.extend(pc, function () {
 
             data.camera = new pc.Camera();
             data._node = component.entity;
+
+            var self = component;
+            data.camera.calculateTransform = function(mat, mode) {
+                if (!self._calculateTransform)
+                    return null;
+
+                return self._calculateTransform(mat, mode);
+            };
+            data.camera.calculateProjection = function(mat, mode) {
+                if (!self._calculateProjection)
+                    return null;
+
+                return self._calculateProjection(mat, mode);
+            };
 
             data.postEffects = new pc.PostEffectQueue(this.app, component);
 
@@ -101,6 +140,32 @@ pc.extend(pc, function () {
 
         onRemove: function (entity, data) {
             data.camera = null;
+        },
+
+        onUpdate: function (dt) {
+            var components = this.store;
+            var component, componentData, cam, vrDisplay;
+
+            if (this.app.vr) {
+                for (var id in components) {
+                    component = components[id];
+                    componentData = component.data;
+                    cam = componentData.camera;
+                    vrDisplay = cam.vrDisplay;
+                    if (componentData.enabled && component.entity.enabled && vrDisplay) {
+                        // Change WebVR near/far planes based on the stereo camera
+                        vrDisplay.setClipPlanes(cam._nearClip, cam._farClip);
+
+                        // update camera node transform from VrDisplay
+                        if (cam._node) {
+                            cam._node.localTransform.copy(vrDisplay.combinedViewInv);
+                            cam._node._dirtyLocal = false;
+                            cam._node._dirtify();
+                            // cam._node.syncHierarchy();
+                        }
+                    }
+                }
+            }
         },
 
         addCamera: function (camera) {
