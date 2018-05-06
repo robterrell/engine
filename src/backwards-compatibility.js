@@ -1,3 +1,31 @@
+/**
+ * @private
+ * @deprecated
+ * Implementation of inheritance for JavaScript objects
+ * @example
+ * // Class can access all of Base's function prototypes
+ * Base = function () {}
+ * Class = function () {}
+ * Class = Class.extendsFrom(Base)
+ * @param {Object} Super Superclass
+ * @returns {Function} Subclass
+ */
+Function.prototype.extendsFrom = function (Super) {
+    var Self, Func;
+    var Temp = function () {};
+
+    Self = this;
+    Func = function () {
+        Super.apply(this, arguments);
+        Self.apply(this, arguments);
+        this.constructor = Self;
+    };
+    Func._super = Super.prototype;
+    Temp.prototype = Super.prototype;
+    Func.prototype = new Temp();
+    return Func;
+};
+
 // Continue to support the old engine namespaces
 pc.anim = {
     Animation: pc.Animation,
@@ -141,3 +169,9 @@ pc.ELEMENTTYPE_UINT16 = pc.TYPE_UINT16;
 pc.ELEMENTTYPE_INT32 = pc.TYPE_INT32;
 pc.ELEMENTTYPE_UINT32 = pc.TYPE_UINT32;
 pc.ELEMENTTYPE_FLOAT32 = pc.TYPE_FLOAT32;
+
+Object.defineProperty(pc.shaderChunks, "transformSkinnedVS", {
+    get: function() {
+        return "#define SKIN\n" + pc.shaderChunks.transformVS;
+    }
+});

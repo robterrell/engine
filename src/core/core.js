@@ -1,10 +1,26 @@
 /**
+ * @private
+ * @function
+ * @name _typeLookup
+ * @description Create look up table for types
+ */
+var _typeLookup = function () {
+    var result = { };
+    var names = ["Array", "Object", "Function", "Date", "RegExp", "Float32Array"];
+
+    for (var i = 0; i < names.length; i++)
+        result["[object " + names[i] + "]"] = names[i].toLowerCase();
+
+    return result;
+}();
+
+/**
  * @name pc
  * @namespace
  * @description Root namespace for the PlayCanvas Engine
  * @preserve PlayCanvas Engine v__CURRENT_SDK_VERSION__ revision __REVISION__
  * http://playcanvas.com
- * Copyright 2011-2017 PlayCanvas Ltd. All rights reserved.
+ * Copyright 2011-2018 PlayCanvas Ltd. All rights reserved.
 // #ifdef DEBUG
  * DEBUG BUILD
 // #endif
@@ -23,7 +39,7 @@ var pc = {
     /**
      * @private
      * @function
-     * @name pc.unpack()
+     * @name pc.unpack
      * @description Copy a set of common PlayCanvas functions/classes/namespaces into the global namespace
      */
     unpack: function () {
@@ -31,20 +47,20 @@ var pc = {
     },
 
     /**
-     * @function
      * @private
+     * @function
      * @name pc.makeArray
      * @description Convert an array-like object into a normal array.
      * For example, this is useful for converting the arguments object into an array.
      * @param {Object} arr The array to convert
-     * @return {Array} An array
+     * @returns {Array} An array
      */
     makeArray: function (arr) {
         var i,
-        ret = [],
-        length = arr.length;
+            ret = [],
+            length = arr.length;
 
-        for(i = 0; i < length; ++i) {
+        for (i = 0; i < length; ++i) {
             ret.push(arr[i]);
         }
 
@@ -57,7 +73,7 @@ var pc = {
      * @name pc.type
      * @description Extended typeof() function, returns the type of the object.
      * @param {Object} obj The object to get the type of
-     * @return {String} The type string: "null", "undefined", "number", "string", "boolean", "array", "object", "function", "date", "regexp" or "float32array"
+     * @returns {String} The type string: "null", "undefined", "number", "string", "boolean", "array", "object", "function", "date", "regexp" or "float32array"
      */
     type: function (obj) {
         if (obj === null) {
@@ -80,7 +96,7 @@ var pc = {
      * @description Merge the contents of two objects into a single object
      * @param {Object} target The target object of the merge
      * @param {Object} ex The object that is merged with target
-     * @return {Object} The target object
+     * @returns {Object} The target object
      * @example
      * var A = {a: function() {console.log(this.a}};
      * var B = {b: function() {console.log(this.b}};
@@ -93,13 +109,13 @@ var pc = {
      */
     extend: function(target, ex) {
         var prop,
-        copy;
+            copy;
 
-        for(prop in ex) {
+        for (prop in ex) {
             copy = ex[prop];
-            if(pc.type(copy) == "object") {
+            if (pc.type(copy) == "object") {
                 target[prop] = pc.extend({}, copy);
-            } else if(pc.type(copy) == "array") {
+            } else if (pc.type(copy) == "array") {
                 target[prop] = pc.extend([], copy);
             } else {
                 target[prop] = copy;
@@ -123,22 +139,6 @@ var pc = {
         return (o !== a);
     }
 };
-
-/**
- * @private
- * @name pc._typeLookup
- * @function
- * @description Create look up table for types
- */
-var _typeLookup = function () {
-    var result = { };
-    var names = [ "Array", "Object", "Function", "Date", "RegExp", "Float32Array" ];
-
-    for(var i = 0; i < names.length; i++)
-        result["[object " + names[i] + "]"] = names[i].toLowerCase();
-
-    return result;
-}();
 
 if (typeof (exports) !== 'undefined')
     exports.pc = pc;

@@ -3,11 +3,11 @@ pc.extend(pc, function () {
     var tmpVecB = new pc.Vec3();
     var tmpVecC = new pc.Vec3();
     var tmpVecD = new pc.Vec3();
-    var diffBetweenPoints = new pc.Vec3();
 
     /**
+     * @constructor
      * @name pc.BoundingSphere
-     * @class A bounding sphere is a volume for facilitating fast intersection testing.
+     * @classdesc A bounding sphere is a volume for facilitating fast intersection testing.
      * @description Creates a new bounding sphere.
      * @example
      * // Create a new bounding sphere centered on the origin with a radius of 0.5
@@ -39,7 +39,7 @@ pc.extend(pc, function () {
             // Find the "average vertex", which is the sphere's center...
 
             for (i = 0; i < numVerts; i++) {
-                vertex.set(vertices[ i * 3 ], vertices[ i * 3 + 1 ], vertices[ i * 3 + 2 ]);
+                vertex.set(vertices[i * 3], vertices[i * 3 + 1], vertices[i * 3 + 2]);
                 sum.addSelf(vertex);
 
                 // apply a part-result to avoid float-overflows
@@ -61,7 +61,7 @@ pc.extend(pc, function () {
             var centerToVert = tmpVecD;
 
             for (i = 0; i < numVerts; i++) {
-                vertex.set(vertices[ i * 3 ], vertices[ i * 3 + 1 ], vertices[ i * 3 + 2 ]);
+                vertex.set(vertices[i * 3], vertices[i * 3 + 1], vertices[i * 3 + 2]);
 
                 centerToVert.sub2(vertex, this.center);
                 maxDistSq = Math.max(centerToVert.lengthSq(), maxDistSq);

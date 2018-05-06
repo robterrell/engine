@@ -1,9 +1,8 @@
 pc.extend(pc, function () {
     /**
+     * @constructor
      * @name pc.Entity
-     * @param {String} [name] The non-unique name of the entity, default is "Untitled".
-     * @param {pc.Application} [app] The application the entity belongs to, default is the current application.
-     * @class The Entity is the core primitive of a PlayCanvas game. Generally speaking an object in your game will consist of an {@link pc.Entity},
+     * @classdesc The Entity is the core primitive of a PlayCanvas game. Generally speaking an object in your game will consist of an {@link pc.Entity},
      * and a set of {@link pc.Component}s which are managed by their respective {@link pc.ComponentSystem}s. One of those components maybe a
      * {@link pc.ScriptComponent} which allows you to write custom code to attach to your Entity.
      * <p>
@@ -12,8 +11,8 @@ pc.extend(pc, function () {
      * The Component and ComponentSystem provide the logic to give an Entity a specific type of behavior. e.g. the ability to
      * render a model or play a sound. Components are specific to an instance of an Entity and are attached (e.g. `this.entity.model`)
      * ComponentSystems allow access to all Entities and Components and are attached to the {@link pc.Application}.
-     * </p>
-     *
+     * @param {String} [name] The non-unique name of the entity, default is "Untitled".
+     * @param {pc.Application} [app] The application the entity belongs to, default is the current application.
      * @example
      * var app = ... // Get the pc.Application
      *
@@ -75,6 +74,8 @@ pc.extend(pc, function () {
      *   <li>"collision" - see {@link pc.CollisionComponent}</li>
      *   <li>"element" - see {@link pc.ElementComponent}</li>
      *   <li>"light" - see {@link pc.LightComponent}</li>
+     *   <li>"layoutchild" - see {@link pc.LayoutChildComponent}</li>
+     *   <li>"layoutgroup" - see {@link pc.LayoutGroupComponent}</li>
      *   <li>"model" - see {@link pc.ModelComponent}</li>
      *   <li>"particlesystem" - see {@link pc.ParticleSystemComponent}</li>
      *   <li>"rigidbody" - see {@link pc.RigidBodyComponent}</li>
@@ -85,7 +86,8 @@ pc.extend(pc, function () {
      * </ul>
      * @param {Object} data The initialization data for the specific component type. Refer to each
      * specific component's API reference page for details on valid values for this parameter.
-     * @returns {pc.Component} The new Component that was attached to the entity
+     * @returns {pc.Component} The new Component that was attached to the entity or null if there
+     * was an error.
      * @example
      * var entity = new pc.Entity();
      * entity.addComponent("light"); // Add a light component with default properties
@@ -96,16 +98,19 @@ pc.extend(pc, function () {
      */
     Entity.prototype.addComponent = function (type, data) {
         var system = this._app.systems[type];
-        if (system) {
-            if (!this.c[type]) {
-                return system.addComponent(this, data);
-            } else {
-                logERROR(pc.string.format("Entity already has {0} Component", type));
-            }
-        } else {
-            logERROR(pc.string.format("System: '{0}' doesn't exist", type));
+        if (!system) {
+            // #ifdef DEBUG
+            console.error("addComponent: System " + type + " doesn't exist");
+            // #endif
             return null;
         }
+        if (this.c[type]) {
+            // #ifdef DEBUG
+            console.warn("addComponent: Entity already has " + type + " component");
+            // #endif
+            return null;
+        }
+        return system.addComponent(this, data);
     };
 
     /**
@@ -121,15 +126,19 @@ pc.extend(pc, function () {
      */
     Entity.prototype.removeComponent = function (type) {
         var system = this._app.systems[type];
-        if (system) {
-            if (this.c[type]) {
-                system.removeComponent(this);
-            } else {
-                logERROR(pc.string.format("Entity doesn't have {0} Component", type));
-            }
-        } else {
-            logERROR(pc.string.format("System: '{0}' doesn't exist", type));
+        if (!system) {
+            // #ifdef DEBUG
+            console.error("removeComponent: System " + type + " doesn't exist");
+            // #endif
+            return;
         }
+        if (!this.c[type]) {
+            // #ifdef DEBUG
+            console.warn("removeComponent: Entity doesn't have " + type + " component");
+            // #endif
+            return;
+        }
+        system.removeComponent(this);
     };
 
     /**
@@ -161,6 +170,8 @@ pc.extend(pc, function () {
         if (node === this && this._app._enableList.length === 0)
             enableFirst = true;
 
+        node._beingEnabled = true;
+
         node._onHierarchyStateChanged(enabled);
 
         if (node._onHierarchyStatePostChanged)
@@ -173,8 +184,10 @@ pc.extend(pc, function () {
                 this._notifyHierarchyStateChanged(c[i], enabled);
         }
 
+        node._beingEnabled = false;
+
         if (enableFirst) {
-            for(i = 0, len = this._app._enableList.length; i < len; i++)
+            for (i = 0, len = this._app._enableList.length; i < len; i++)
                 this._app._enableList[i]._onHierarchyStatePostChanged();
 
             this._app._enableList.length = 0;
@@ -236,13 +249,14 @@ pc.extend(pc, function () {
      * @function
      * @name pc.Entity#findByGuid
      * @description Find a descendant of this Entity with the GUID
+     * @param {String} guid The GUID to search for.
      * @returns {pc.Entity} The Entity with the GUID or null
      */
     Entity.prototype.findByGuid = function (guid) {
         if (this._guid === guid) return this;
 
         for (var i = 0; i < this._children.length; i++) {
-            if(this._children[i].findByGuid) {
+            if (this._children[i].findByGuid) {
                 var found = this._children[i].findByGuid(guid);
                 if (found !== null) return found;
             }
@@ -259,7 +273,6 @@ pc.extend(pc, function () {
     * firstChild.destroy(); // delete child, all components and remove from hierarchy
     */
     Entity.prototype.destroy = function () {
-        var childGuids;
         var name;
 
         // Disable all enabled components first
@@ -277,7 +290,6 @@ pc.extend(pc, function () {
             this._parent.removeChild(this);
 
         var children = this._children;
-        var length = children.length;
         var child = children.shift();
         while (child) {
             if (child instanceof pc.Entity) {

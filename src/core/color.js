@@ -1,17 +1,18 @@
 pc.extend(pc, (function () {
     /**
-    * @name pc.Color
-    * @class Representation of an RGBA color
-    * @description Create a new Color object
-    * @param {Number} [r] The value of the red component (0-1). If r is an array of length 3 or 4, the array will be used to populate all components.
-    * @param {Number} [g] The value of the green component (0-1)
-    * @param {Number} [b] The value of the blue component (0-1)
-    * @param {Number} [a] The value of the alpha component (0-1)
-    * @property {Number} r The red component of the color
-    * @property {Number} g The green component of the color
-    * @property {Number} b The blue component of the color
-    * @property {Number} a The alpha component of the color
-    */
+     * @constructor
+     * @name pc.Color
+     * @classdesc Representation of an RGBA color
+     * @description Create a new Color object
+     * @param {Number} [r] The value of the red component (0-1). If r is an array of length 3 or 4, the array will be used to populate all components.
+     * @param {Number} [g] The value of the green component (0-1)
+     * @param {Number} [b] The value of the blue component (0-1)
+     * @param {Number} [a] The value of the alpha component (0-1)
+     * @property {Number} r The red component of the color
+     * @property {Number} g The green component of the color
+     * @property {Number} b The blue component of the color
+     * @property {Number} a The alpha component of the color
+     */
     var Color = function (r, g, b, a) {
         this.buffer = new ArrayBuffer(4 * 4);
 
@@ -99,7 +100,7 @@ pc.extend(pc, (function () {
          * @returns {pc.Color} Self for chaining
          */
         fromString: function (hex) {
-            var i = parseInt(hex.replace('#', '0x'));
+            var i = parseInt(hex.replace('#', '0x'), 16);
             var bytes;
             if (hex.length > 7) {
                 bytes = pc.math.intToBytes32(i);
@@ -108,7 +109,7 @@ pc.extend(pc, (function () {
                 bytes[3] = 255;
             }
 
-            this.set(bytes[0]/255, bytes[1]/255, bytes[2]/255, bytes[3]/255);
+            this.set(bytes[0] / 255, bytes[1] / 255, bytes[2] / 255, bytes[3] / 255);
 
             return this;
         },
@@ -119,6 +120,7 @@ pc.extend(pc, (function () {
          * @description Converts the color to string form. The format is '#RRGGBBAA', where
          * RR, GG, BB, AA are the red, green, blue and alpha values. When the alpha value is not
          * included (the default), this is the same format as used in HTML/CSS.
+         * @param {Boolean} alpha If true, the output string will include the alpha value.
          * @returns {String} The color in string form.
          * @example
          * var c = new pc.Color(1, 1, 1);
@@ -126,10 +128,10 @@ pc.extend(pc, (function () {
          * console.log(c.toString());
          */
         toString: function (alpha) {
-            var s = "#" + ((1 << 24) + (parseInt(this.r*255) << 16) + (parseInt(this.g*255) << 8) + parseInt(this.b*255)).toString(16).slice(1);
+            var s = "#" + ((1 << 24) + (Math.round(this.r * 255) << 16) + (Math.round(this.g * 255) << 8) + Math.round(this.b * 255)).toString(16).slice(1);
             if (alpha === true) {
-                var a = parseInt(this.a * 255).toString(16);
-                if (this.a < 16/255) {
+                var a = Math.round(this.a * 255).toString(16);
+                if (this.a < 16 / 255) {
                     s += '0' + a;
                 } else {
                     s += a;

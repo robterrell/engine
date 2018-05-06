@@ -17,15 +17,15 @@
  */
 pc.events = {
     /**
-    * @function
-    * @name pc.events.attach
-    * @description Attach event methods 'on', 'off', 'fire', 'once' and 'hasEvent' to the target object
-    * @param {Object} target The object to add events to.
-    * @return {Object} The target object
-    * @example
-    * var obj = { };
-    * pc.events.attach(obj);
-    */
+     * @function
+     * @name pc.events.attach
+     * @description Attach event methods 'on', 'off', 'fire', 'once' and 'hasEvent' to the target object
+     * @param {Object} target The object to add events to.
+     * @returns {Object} The target object
+     * @example
+     * var obj = { };
+     * pc.events.attach(obj);
+     */
     attach: function (target) {
         var ev = pc.events;
         target.on = ev.on;
@@ -58,7 +58,7 @@ pc.events = {
             this._callbacks = { };
 
         if (! this._callbacks[name])
-            this._callbacks[name] = [ ];
+            this._callbacks[name] = [];
 
         if (! this._callbackActive)
             this._callbackActive = { };
@@ -101,7 +101,7 @@ pc.events = {
                 if (this._callbackActive[name] && this._callbackActive[name] === this._callbacks[name])
                     this._callbackActive[name] = this._callbackActive[name].slice();
             } else {
-                for(var key in this._callbackActive) {
+                for (var key in this._callbackActive) {
                     if (! this._callbacks[key])
                         continue;
 
@@ -125,7 +125,7 @@ pc.events = {
 
             var i = events.length;
 
-            while(i--) {
+            while (i--) {
                 if (events[i].callback !== callback)
                     continue;
 
@@ -166,7 +166,7 @@ pc.events = {
             callbacks = this._callbacks[name].slice();
         }
 
-        for(var i = 0; (callbacks || this._callbackActive[name]) && (i < (callbacks || this._callbackActive[name]).length); i++) {
+        for (var i = 0; (callbacks || this._callbackActive[name]) && (i < (callbacks || this._callbackActive[name]).length); i++) {
             var evt = (callbacks || this._callbackActive[name])[i];
             evt.callback.call(evt.scope, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
 
@@ -208,15 +208,17 @@ pc.events = {
     },
 
     /**
-    * @function
-    * @name pc.events.hasEvent
-    * @description Test if there are any handlers bound to an event name
-    * @param {String} name The name of the event to test
-    * @example
-    * obj.on('test', function () { }); // bind an event to 'test'
-    * obj.hasEvent('test'); // returns true
-    */
+     * @function
+     * @name pc.events.hasEvent
+     * @description Test if there are any handlers bound to an event name
+     * @param {String} name The name of the event to test
+     * @returns {Boolean} true if the object has handlers bound to the specified event name.
+     * @example
+     * obj.on('test', function () { }); // bind an event to 'test'
+     * obj.hasEvent('test'); // returns true
+     * obj.hasEvent('hello'); // returns false
+     */
     hasEvent: function (name) {
-        return this._callbacks && this._callbacks[name] && this._callbacks[name].length !== 0;
+        return (this._callbacks && this._callbacks[name] && this._callbacks[name].length !== 0) || false;
     }
 };

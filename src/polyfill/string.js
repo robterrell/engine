@@ -6,8 +6,8 @@ if (! String.prototype.startsWith) {
         writable: true,
         value: function(str) {
             var that = this;
-            for(var i = 0, ceil = str.length; i < ceil; i++)
-                if(that[i] !== str[i]) return false;
+            for (var i = 0, ceil = str.length; i < ceil; i++)
+                if (that[i] !== str[i]) return false;
             return true;
         }
     });
@@ -21,7 +21,7 @@ if (! String.prototype.endsWith) {
         writable: true,
         value: function(str) {
             var that = this;
-            for(var i = 0, ceil = str.length; i < ceil; i++)
+            for (var i = 0, ceil = str.length; i < ceil; i++)
                 if (that[i + that.length - ceil] !== str[i])
                     return false;
             return true;
@@ -38,8 +38,8 @@ if (!String.prototype.includes) {
 
         if (start + search.length > this.length) {
             return false;
-        } else {
-            return this.indexOf(search, start) !== -1;
         }
+
+        return this.indexOf(search, start) !== -1;
     };
 }

@@ -5,9 +5,10 @@ pc.extend(pc, function () {
     var tmpMat4 = new pc.Mat4();
 
     /**
+     * @constructor
      * @name pc.OrientedBox
      * @description Create a new oriented box.
-     * @class Oriented Box.
+     * @classdesc Oriented Box.
      * @property {pc.Mat4} [worldTransform] The world transform of the OBB
      * @param {pc.Mat4} [worldTransform] Transform that has the orientation and position of the box. Scale is assumed to be one.
      * @param {pc.Vec3} [halfExtents] Half the distance across the box in each local axis. The constructor takes a reference of this parameter.
@@ -37,9 +38,9 @@ pc.extend(pc, function () {
                 var result = this._aabb._intersectsRay(tmpRay, point);
                 tmpMat4.copy(this._modelTransform).invert().transformPoint(point, point);
                 return result;
-            } else {
-                return this._aabb._fastIntersectsRay(tmpRay);
             }
+
+            return this._aabb._fastIntersectsRay(tmpRay);
         },
 
         /**

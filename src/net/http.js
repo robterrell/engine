@@ -2,26 +2,27 @@ pc.extend(pc, function () {
     /**
     * @name pc.Http
     * @class Used to send and receive HTTP requests.
-    * @description Create a new Http instance. Note: By default a PlayCanvas application creates an instance of this object at `pc.http`.
+    * @description Create a new Http instance. By default, a PlayCanvas application creates an instance of this
+    * object at `pc.http`.
     */
     var Http = function Http() {
     };
 
     Http.ContentType = {
-        FORM_URLENCODED : "application/x-www-form-urlencoded",
-        GIF : "image/gif",
-        JPEG : "image/jpeg",
-        DDS : "image/dds",
-        JSON : "application/json",
-        PNG : "image/png",
-        TEXT : "text/plain",
-        XML : "application/xml",
-        WAV : "audio/x-wav",
-        OGG : "audio/ogg",
-        MP3 : "audio/mpeg",
-        MP4 : "audio/mp4",
-        AAC : "audio/aac",
-        BIN : "application/octet-stream"
+        FORM_URLENCODED: "application/x-www-form-urlencoded",
+        GIF: "image/gif",
+        JPEG: "image/jpeg",
+        DDS: "image/dds",
+        JSON: "application/json",
+        PNG: "image/png",
+        TEXT: "text/plain",
+        XML: "application/xml",
+        WAV: "audio/x-wav",
+        OGG: "audio/ogg",
+        MP3: "audio/mpeg",
+        MP4: "audio/mp4",
+        AAC: "audio/aac",
+        BIN: "application/octet-stream"
     };
 
     Http.ResponseType = {
@@ -55,14 +56,17 @@ pc.extend(pc, function () {
          * @param {String} url
          * @param {Object} [options] Additional options
          * @param {Object} [options.headers] HTTP headers to add to the request
-         * @param {Boolean} [options.async] Make the request asynchronously (default: true)
+         * @param {Boolean} [options.async] Make the request asynchronously. Defaults to true.
          * @param {Object} [options.cache] If false, then add a timestamp to the request to prevent caching
-         * @param {Boolean} [options.withCredentials] Send cookies with this request (default: true)
+         * @param {Boolean} [options.withCredentials] Send cookies with this request. Defaults to true.
          * @param {String} [options.responseType] Override the response type
          * @param {Document | Object} [options.postdata] Data to send in the body of the request.
-         * Some content types are handled automatically, If postdata is an XML Document it is handled, if the Content-Type header is set to 'application/json' then
-         * the postdata is JSON stringified, otherwise by default the data is sent as form-urlencoded
-         * @param {Function} callback The callback used when the response has returned. Passed (err, data) where data is the response (format depends on response type, text, Object, ArrayBuffer, XML) and err is the error code.
+         * Some content types are handled automatically. If postdata is an XML Document, it is handled. If
+         * the Content-Type header is set to 'application/json' then the postdata is JSON stringified.
+         * Otherwise, by default, the data is sent as form-urlencoded.
+         * @param {Function} callback The callback used when the response has returned. Passed (err, data)
+         * where data is the response (format depends on response type: text, Object, ArrayBuffer, XML) and
+         * err is the error code.
          * @example
          * pc.http.get("http://example.com/", function (err, response) {
          *     console.log(response);
@@ -81,16 +85,19 @@ pc.extend(pc, function () {
          * @name pc.Http#post
          * @description Perform an HTTP POST request to the given url
          * @param {String} url The URL to make the request to
+         * @param {Object} data Data to send in the body of the request.
+         * Some content types are handled automatically. If postdata is an XML Document, it is handled. If
+         * the Content-Type header is set to 'application/json' then the postdata is JSON stringified.
+         * Otherwise, by default, the data is sent as form-urlencoded.
          * @param {Object} [options] Additional options
          * @param {Object} [options.headers] HTTP headers to add to the request
-         * @param {Boolean} [options.async] Make the request asynchronously (default: true)
+         * @param {Boolean} [options.async] Make the request asynchronously. Defaults to true.
          * @param {Object} [options.cache] If false, then add a timestamp to the request to prevent caching
-         * @param {Boolean} [options.withCredentials] Send cookies with this request (default: true)
+         * @param {Boolean} [options.withCredentials] Send cookies with this request. Defaults to true.
          * @param {String} [options.responseType] Override the response type
-         * @param {Object} data Data to send in the body of the request.
-         * Some content types are handled automatically, If postdata is an XML Document it is handled, if the Content-Type header is set to 'application/json' then
-         * the postdata is JSON stringified, otherwise by default the data is sent as form-urlencoded
-         * @param {Function} callback The callback used when the response has returned. Passed (err, data) where data is the response (format depends on response type, text, Object, ArrayBuffer, XML) and err is the error code.
+         * @param {Function} callback The callback used when the response has returned. Passed (err, data)
+         * where data is the response (format depends on response type: text, Object, ArrayBuffer, XML) and
+         * err is the error code.
          */
         post: function (url, data, options, callback) {
             if (typeof(options) === "function") {
@@ -106,16 +113,19 @@ pc.extend(pc, function () {
          * @name pc.Http#put
          * @description Perform an HTTP PUT request to the given url
          * @param {String} url The URL to make the request to
+         * @param {Document | Object} data Data to send in the body of the request.
+         * Some content types are handled automatically. If postdata is an XML Document, it is handled. If
+         * the Content-Type header is set to 'application/json' then the postdata is JSON stringified.
+         * Otherwise, by default, the data is sent as form-urlencoded.
          * @param {Object} [options] Additional options
          * @param {Object} [options.headers] HTTP headers to add to the request
-         * @param {Boolean} [options.async] Make the request asynchronously (default: true)
+         * @param {Boolean} [options.async] Make the request asynchronously. Defaults to true.
          * @param {Object} [options.cache] If false, then add a timestamp to the request to prevent caching
-         * @param {Boolean} [options.withCredentials] Send cookies with this request (default: true)
+         * @param {Boolean} [options.withCredentials] Send cookies with this request. Defaults to true.
          * @param {String} [options.responseType] Override the response type
-         * @param {Document | Object} data Data to send in the body of the request.
-         * Some content types are handled automatically, If postdata is an XML Document it is handled, if the Content-Type header is set to 'application/json' then
-         * the postdata is JSON stringified, otherwise by default the data is sent as form-urlencoded
-         * @param {Function} callback The callback used when the response has returned. Passed (err, data) where data is the response (format depends on response type, text, Object, ArrayBuffer, XML) and err is the error code.
+         * @param {Function} callback The callback used when the response has returned. Passed (err, data)
+         * where data is the response (format depends on response type: text, Object, ArrayBuffer, XML) and
+         * err is the error code.
          */
         put: function (url, data, options, callback) {
             if (typeof(options) === "function") {
@@ -133,14 +143,17 @@ pc.extend(pc, function () {
          * @param {Object} url The URL to make the request to
          * @param {Object} [options] Additional options
          * @param {Object} [options.headers] HTTP headers to add to the request
-         * @param {Boolean} [options.async] Make the request asynchronously (default: true)
+         * @param {Boolean} [options.async] Make the request asynchronously. Defaults to true.
          * @param {Object} [options.cache] If false, then add a timestamp to the request to prevent caching
-         * @param {Boolean} [options.withCredentials] Send cookies with this request (default: true)
+         * @param {Boolean} [options.withCredentials] Send cookies with this request. Defaults to true.
          * @param {String} [options.responseType] Override the response type
          * @param {Document | Object} [options.postdata] Data to send in the body of the request.
-         * Some content types are handled automatically, If postdata is an XML Document it is handled, if the Content-Type header is set to 'application/json' then
-         * the postdata is JSON stringified, otherwise by default the data is sent as form-urlencoded
-         * @param {Function} callback The callback used when the response has returned. Passed (err, data) where data is the response (format depends on response type, text, Object, ArrayBuffer, XML) and err is the error code.
+         * Some content types are handled automatically. If postdata is an XML Document, it is handled. If
+         * the Content-Type header is set to 'application/json' then the postdata is JSON stringified.
+         * Otherwise, by default, the data is sent as form-urlencoded.
+         * @param {Function} callback The callback used when the response has returned. Passed (err, data)
+         * where data is the response (format depends on response type: text, Object, ArrayBuffer, XML) and
+         * err is the error code.
          */
         del: function (url, options, callback) {
             if (typeof(options) === "function") {
@@ -158,14 +171,17 @@ pc.extend(pc, function () {
          * @param {String} url The url to make the request to
          * @param {Object} [options] Additional options
          * @param {Object} [options.headers] HTTP headers to add to the request
-         * @param {Boolean} [options.async] Make the request asynchronously (default: true)
+         * @param {Boolean} [options.async] Make the request asynchronously. Defaults to true.
          * @param {Object} [options.cache] If false, then add a timestamp to the request to prevent caching
-         * @param {Boolean} [options.withCredentials] Send cookies with this request (default: true)
+         * @param {Boolean} [options.withCredentials] Send cookies with this request. Defaults to true.
          * @param {String} [options.responseType] Override the response type
          * @param {Document|Object} [options.postdata] Data to send in the body of the request.
-         * Some content types are handled automatically, If postdata is an XML Document it is handled, if the Content-Type header is set to 'application/json' then
-         * the postdata is JSON stringified, otherwise by default the data is sent as form-urlencoded
-         * @param {Function} callback The callback used when the response has retured. Passed (err, data) where data is the response (format depends on response type, text, Object, ArrayBuffer, XML) and err is the error code.
+         * Some content types are handled automatically. If postdata is an XML Document, it is handled. If
+         * the Content-Type header is set to 'application/json' then the postdata is JSON stringified.
+         * Otherwise, by default, the data is sent as form-urlencoded.
+         * @param {Function} callback The callback used when the response has returned. Passed (err, data)
+         * where data is the response (format depends on response type: text, Object, ArrayBuffer, XML) and
+         * err is the error code.
          */
         request: function (method, url, options, callback) {
             var uri, query, timestamp, postdata, xhr;
@@ -192,20 +208,18 @@ pc.extend(pc, function () {
                     // It's an XML document, so we can send it directly.
                     // XMLHttpRequest will set the content type correctly.
                     postdata = options.postdata;
-                }
-                else if (options.postdata instanceof FormData) {
+                } else if (options.postdata instanceof FormData) {
                     postdata = options.postdata;
-                }
-                else if (options.postdata instanceof Object) {
+                } else if (options.postdata instanceof Object) {
                     // Now to work out how to encode the post data based on the headers
                     var contentType = options.headers["Content-Type"];
 
                     // If there is no type then default to form-encoded
-                    if(contentType === undefined) {
+                    if (contentType === undefined) {
                         options.headers["Content-Type"] = Http.ContentType.FORM_URLENCODED;
                         contentType = options.headers["Content-Type"];
                     }
-                    switch(contentType) {
+                    switch (contentType) {
                         case Http.ContentType.FORM_URLENCODED:
                             // Normal URL encoded form data
                             postdata = "";
@@ -216,8 +230,7 @@ pc.extend(pc, function () {
                                 if (options.postdata.hasOwnProperty(key)) {
                                     if (bFirstItem) {
                                         bFirstItem = false;
-                                    }
-                                    else {
+                                    } else {
                                         postdata += "&";
                                     }
                                     postdata += escape(key) + "=" + escape(options.postdata[key]);
@@ -232,8 +245,7 @@ pc.extend(pc, function () {
                             postdata = JSON.stringify(options.postdata);
                             break;
                     }
-                }
-                else {
+                } else {
                     postdata = options.postdata;
                 }
             }
@@ -249,8 +261,7 @@ pc.extend(pc, function () {
                 uri = new pc.URI(url);
                 if (!uri.query) {
                     uri.query = "ts=" + timestamp;
-                }
-                else {
+                } else {
                     uri.query = uri.query + "&ts=" + timestamp;
                 }
                 url = uri.toString();
@@ -285,8 +296,7 @@ pc.extend(pc, function () {
 
             try {
                 xhr.send(postdata);
-            }
-            catch (e) {
+            } catch (e) {
                 // DWE: Don't callback on exceptions as behaviour is inconsistent, e.g. cross-domain request errors don't throw an exception.
                 // Error callback should be called by xhr.onerror() callback instead.
                 if (!errored) {
@@ -302,7 +312,7 @@ pc.extend(pc, function () {
             var uri = new pc.URI(url);
             var ext = pc.path.getExtension(uri.path);
 
-            if(Http.binaryExtensions.indexOf(ext) >= 0) {
+            if (Http.binaryExtensions.indexOf(ext) >= 0) {
                 return Http.ResponseType.ARRAY_BUFFER;
             }
 
@@ -342,7 +352,6 @@ pc.extend(pc, function () {
                         break;
                     }
                     default: {
-                        //options.error(xhr.status, xhr, null);
                         this._onError(method, url, options, xhr);
                         break;
                     }
@@ -354,16 +363,12 @@ pc.extend(pc, function () {
             var response;
             var header;
             var contentType;
-            var parameter;
             var parts;
             header = xhr.getResponseHeader("Content-Type");
             if (header) {
                 // Split up header into content type and parameter
                 parts = header.split(";");
                 contentType = parts[0].trim();
-                if(parts[1]) {
-                    parameter = parts[1].trim();
-                }
             }
             // Check the content type to see if we want to parse it
             if (contentType === this.ContentType.JSON || url.split('?')[0].endsWith(".json")) {
@@ -386,13 +391,11 @@ pc.extend(pc, function () {
                 }
             }
 
-            options.callback(null, response);//, xhr.status, xhr);
-            // options.success(response, xhr.status, xhr);
+            options.callback(null, response);
         },
 
         _onError: function (method, url, options, xhr) {
-            options.callback(xhr.status, null);//, xhr.status, xhr);
-            // options.error(xhr.status, xhr, null);
+            options.callback(xhr.status, null);
         }
     };
 

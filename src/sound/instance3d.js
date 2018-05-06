@@ -8,9 +8,10 @@ pc.extend(pc, function () {
 
     if (pc.SoundManager.hasAudioContext()) {
         /**
+        * @constructor
         * @name pc.SoundInstance3d
         * @extends pc.SoundInstance
-        * @class A pc.SoundInstance3d plays a {@link pc.Sound} in 3D
+        * @classdesc A pc.SoundInstance3d plays a {@link pc.Sound} in 3D
         * @param {pc.SoundManager} manager The sound manager
         * @param {pc.Sound} sound The sound to play
         * @param {Object} options Options for the instance
@@ -130,18 +131,17 @@ pc.extend(pc, function () {
                 return 1;
             } else if (distance > maxDistance) {
                 return 0;
-            } else {
-                var result = 0;
-                if (distanceModel === pc.DISTANCE_LINEAR) {
-                    result = 1 - rollOffFactor * (distance - refDistance) / (maxDistance - refDistance);
-                } else if (distanceModel === pc.DISTANCE_INVERSE) {
-                    result = refDistance / (refDistance + rollOffFactor * (distance - refDistance));
-                } else if (distanceModel === pc.DISTANCE_EXPONENTIAL) {
-                    result = Math.pow(distance / refDistance, -rollOffFactor);
-                }
-
-                return pc.math.clamp(result, 0, 1);
             }
+
+            var result = 0;
+            if (distanceModel === pc.DISTANCE_LINEAR) {
+                result = 1 - rollOffFactor * (distance - refDistance) / (maxDistance - refDistance);
+            } else if (distanceModel === pc.DISTANCE_INVERSE) {
+                result = refDistance / (refDistance + rollOffFactor * (distance - refDistance));
+            } else if (distanceModel === pc.DISTANCE_EXPONENTIAL) {
+                result = Math.pow(distance / refDistance, -rollOffFactor);
+            }
+            return pc.math.clamp(result, 0, 1);
         };
 
         SoundInstance3d = function (manager, sound, options) {

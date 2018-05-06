@@ -14,9 +14,10 @@ pc.extend(pc, function () {
 
     /**
      * @component
+     * @constructor
      * @name pc.ScreenComponent
+     * @classdesc A ScreenComponent enables the Entity to render child {@link pc.ElementComponent}s using anchors and positions in the ScreenComponent's space.
      * @description Create a new ScreenComponent
-     * @class A ScreenComponent enables the Entity to render child {@link pc.ElementComponent}s using anchors and positions in the ScreenComponent's space.
      * @param {pc.ScreenComponentSystem} system The ComponentSystem that created this Component
      * @param {pc.Entity} entity The Entity that this Component is attached to.
      * @extends pc.Component
@@ -28,7 +29,7 @@ pc.extend(pc, function () {
      */
     var ScreenComponent = function ScreenComponent (system, entity) {
         this._resolution = new pc.Vec2(640, 320);
-        this._referenceResolution = new pc.Vec2(640,320);
+        this._referenceResolution = new pc.Vec2(640, 320);
         this._scaleMode = pc.SCALEMODE_NONE;
         this.scale = 1;
         this._scaleBlend = 0.5;
@@ -85,7 +86,7 @@ pc.extend(pc, function () {
             this._screenMatrix.setOrtho(left, right, bottom, top, near, far);
 
             if (!this._screenSpace) {
-                _transform.setScale(0.5*w, 0.5*h, 1);
+                _transform.setScale(0.5 * w, 0.5 * h, 1);
                 this._screenMatrix.mul2(_transform, this._screenMatrix);
             }
         },
@@ -100,7 +101,7 @@ pc.extend(pc, function () {
             // the combined scale is 1 for an even blend
             var lx = Math.log2(resolution.x / referenceResolution.x);
             var ly = Math.log2(resolution.y / referenceResolution.y);
-            return Math.pow(2, (lx*(1-this._scaleBlend) + ly*this._scaleBlend));
+            return Math.pow(2, (lx * (1 - this._scaleBlend) + ly * this._scaleBlend));
         },
 
         _onResize: function (width, height) {
@@ -112,6 +113,7 @@ pc.extend(pc, function () {
 
         onRemove: function () {
             this.system.app.graphicsDevice.off("resizecanvas", this._onResize, this);
+            this.fire('remove');
         }
     });
 
@@ -152,9 +154,9 @@ pc.extend(pc, function () {
         get: function () {
             if (this._scaleMode === pc.SCALEMODE_NONE) {
                 return this._resolution;
-            } else {
-                return this._referenceResolution;
             }
+            return this._referenceResolution;
+
         }
     });
 

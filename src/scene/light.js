@@ -4,12 +4,13 @@ pc.extend(pc, function () {
     var spotEndPoint = new pc.Vec3();
     var tmpVec = new pc.Vec3();
 
-    var chanId = { r:0, g:1, b:2, a:3 };
+    var chanId = { r: 0, g: 1, b: 2, a: 3 };
 
     /**
      * @private
+     * @constructor
      * @name pc.Light
-     * @class A light.
+     * @classdesc A light.
      */
     var Light = function Light() {
         // Light properties (defaults)
@@ -71,9 +72,17 @@ pc.extend(pc, function () {
         this._isPcf = true;
         this._cacheShadowMap = false;
         this._isCachedShadowMap = false;
+
+        this._visibleLength = [0]; // lengths of passes in culledList
+        this._visibleList = [[]]; // culled mesh instances per pass (1 for spot, 6 for point, cameraCount for directional)
+        this._visibleCameraSettings = []; // camera settings used in each directional light pass
     };
 
     Light.prototype = {
+        destroy: function () {
+            this._destroyShadowMap();
+        },
+
         /**
          * @private
          * @function
@@ -128,14 +137,14 @@ pc.extend(pc, function () {
         },
 
         getBoundingSphere: function (sphere) {
-            if (this._type===pc.LIGHTTYPE_SPOT) {
+            if (this._type === pc.LIGHTTYPE_SPOT) {
                 var range = this.attenuationEnd;
                 var angle = this._outerConeAngle;
                 var f = Math.cos(angle * pc.math.DEG_TO_RAD);
                 var node = this._node;
 
                 spotCenter.copy(node.up);
-                spotCenter.scale(-range*0.5*f);
+                spotCenter.scale(-range * 0.5 * f);
                 spotCenter.add(node.getPosition());
                 sphere.center = spotCenter;
 
@@ -148,26 +157,26 @@ pc.extend(pc, function () {
 
                 sphere.radius = spotEndPoint.length() * 0.5;
 
-            } else if (this._type===pc.LIGHTTYPE_POINT) {
+            } else if (this._type === pc.LIGHTTYPE_POINT) {
                 sphere.center = this._node.getPosition();
                 sphere.radius = this.attenuationEnd;
             }
         },
 
         getBoundingBox: function (box) {
-            if (this._type===pc.LIGHTTYPE_SPOT) {
+            if (this._type === pc.LIGHTTYPE_SPOT) {
                 var range = this.attenuationEnd;
                 var angle = this._outerConeAngle;
                 var node = this._node;
 
                 var scl = Math.abs( Math.sin(angle * pc.math.DEG_TO_RAD) * range );
 
-                box.center.set(0, -range*0.5, 0);
-                box.halfExtents.set(scl, range*0.5, scl);
+                box.center.set(0, -range * 0.5, 0);
+                box.halfExtents.set(scl, range * 0.5, scl);
 
                 box.setFromTransformedAabb(box, node.getWorldTransform());
 
-            } else if (this._type===pc.LIGHTTYPE_POINT) {
+            } else if (this._type === pc.LIGHTTYPE_POINT) {
                 box.center.copy(this._node.getPosition());
                 box.halfExtents.set(this.attenuationEnd, this.attenuationEnd, this.attenuationEnd);
             }
@@ -190,7 +199,7 @@ pc.extend(pc, function () {
             // Update final color
             var i = this._intensity;
             this._finalColor.set(r * i, g * i, b * i);
-            for(var c=0; c<3; c++) {
+            for (var c = 0; c < 3; c++) {
                 if (i >= 1) {
                     this._linearFinalColor.data[c] = Math.pow(this._finalColor.data[c] / i, 2.2) * i;
                 } else {
@@ -206,12 +215,13 @@ pc.extend(pc, function () {
                     var i;
                     if (rt) {
                         if (rt.length) {
-                            for(i=0; i<rt.length; i++) {
+                            for (i = 0; i < rt.length; i++) {
                                 if (rt[i].colorBuffer) rt[i].colorBuffer.destroy();
                                 rt[i].destroy();
                             }
                         } else {
                             if (rt.colorBuffer) rt.colorBuffer.destroy();
+                            if (rt.depthBuffer) rt.depthBuffer.destroy();
                             rt.destroy();
                         }
                     }
@@ -219,14 +229,14 @@ pc.extend(pc, function () {
                 this._shadowCamera.renderTarget = null;
                 this._shadowCamera = null;
                 this._shadowCubeMap = null;
-                if (this.shadowUpdateMode===pc.SHADOWUPDATE_NONE) {
+                if (this.shadowUpdateMode === pc.SHADOWUPDATE_NONE) {
                     this.shadowUpdateMode = pc.SHADOWUPDATE_THISFRAME;
                 }
             }
         },
 
         updateShadow: function() {
-            if (this.shadowUpdateMode!==pc.SHADOWUPDATE_REALTIME) {
+            if (this.shadowUpdateMode !== pc.SHADOWUPDATE_REALTIME) {
                 this.shadowUpdateMode = pc.SHADOWUPDATE_THISFRAME;
             }
         },
@@ -246,19 +256,20 @@ pc.extend(pc, function () {
             // 16 - 17 : cookie channel G
             // 14 - 15 : cookie channel B
             // 12      : cookie transform
-            var key = (this._type << 29) |
-                   ((this._castShadows? 1 : 0)                  << 28) |
-                   (this._shadowType                            << 25) |
-                   (this._falloffMode                           << 23) |
-                   ((this._normalOffsetBias!==0.0? 1 : 0)       << 22) |
-                   ((this._cookie? 1 : 0)                       << 21) |
-                   ((this._cookieFalloff? 1 : 0)                << 20) |
-                   (chanId[this._cookieChannel.charAt(0)]       << 18) |
-                   ((this._cookieTransform? 1 : 0)              << 12);
+            var key =
+                   (this._type                                << 29) |
+                   ((this._castShadows ? 1 : 0)               << 28) |
+                   (this._shadowType                          << 25) |
+                   (this._falloffMode                         << 23) |
+                   ((this._normalOffsetBias !== 0.0 ? 1 : 0)  << 22) |
+                   ((this._cookie ? 1 : 0)                    << 21) |
+                   ((this._cookieFalloff ? 1 : 0)             << 20) |
+                   (chanId[this._cookieChannel.charAt(0)]     << 18) |
+                   ((this._cookieTransform ? 1 : 0)           << 12);
 
-            if (this._cookieChannel.length===3) {
-                key |= (chanId[this._cookieChannel.charAt(1)]   << 16);
-                key |= (chanId[this._cookieChannel.charAt(2)]   << 14);
+            if (this._cookieChannel.length === 3) {
+                key |= (chanId[this._cookieChannel.charAt(1)] << 16);
+                key |= (chanId[this._cookieChannel.charAt(2)] << 14);
             }
 
             this.key = key;
@@ -296,6 +307,8 @@ pc.extend(pc, function () {
             var stype = this._shadowType;
             this._shadowType = null;
             this.shadowType = stype; // refresh shadow type; switching from direct/spot to point and back may change it
+
+            if (this._scene !== null) this._scene.layers._dirtyLights = true;
         }
     });
 
@@ -379,8 +392,6 @@ pc.extend(pc, function () {
             this._shadowResolution = value;
         }
     });
-
-
 
     Object.defineProperty(Light.prototype, 'vsmBlurSize', {
         get: function() {
@@ -470,7 +481,7 @@ pc.extend(pc, function () {
             var b = c[2];
             var i = this._intensity;
             this._finalColor.set(r * i, g * i, b * i);
-            for(var j = 0; j < 3; j++) {
+            for (var j = 0; j < 3; j++) {
                 if (i >= 1) {
                     this._linearFinalColor.data[j] = Math.pow(this._finalColor.data[j] / i, 2.2) * i;
                 } else {
@@ -570,13 +581,13 @@ pc.extend(pc, function () {
                     this._scene.updateShaders = true;
             }
             if (xformNew && !value && this._cookieOffset) {
-                this._cookieOffset.set(0,0);
+                this._cookieOffset.set(0, 0);
             } else {
                 this._cookieOffset = value;
             }
             this._cookieOffsetSet = !! value;
             if (value && ! this._cookieTransform) {
-                this.cookieTransform = new pc.Vec4(1,1,0,0); // using offset forces using matrix code
+                this.cookieTransform = new pc.Vec4(1, 1, 0, 0); // using offset forces using matrix code
                 this._cookieTransformSet = false;
             }
             this.updateKey();

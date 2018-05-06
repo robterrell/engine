@@ -11,6 +11,11 @@ pc.extend(pc, function () {
     var _m = new pc.Vec3();
     var _sct = new pc.Vec3();
 
+    // pi x p2 * p3
+    var scalarTriple = function (p1, p2, p3) {
+        return _sct.cross(p1, p2).dot(p3);
+    };
+
     // Given line pq and ccw corners of a quad, return whether the line
     // intersects it. (from Real-Time Collision Detection book)
     var intersectLineQuad = function (p, q, corners) {
@@ -39,19 +44,22 @@ pc.extend(pc, function () {
                 return false;
         }
 
+        // The algorithm above doesn't work if all the corners are the same
+        // So do that test here by checking if the diagonals are 0 (since these are rectangles we're checking against)
+        if (_pq.sub2(corners[0], corners[2]).lengthSq() < 0.0001 * 0.0001) return false;
+        if (_pq.sub2(corners[1], corners[3]).lengthSq() < 0.0001 * 0.0001) return false;
+
         return true;
     };
 
-    // pi x p2 * p3
-    var scalarTriple = function (p1, p2, p3) {
-        return _sct.cross(p1, p2).dot(p3);
-    };
-
     /**
+     * @constructor
      * @name pc.ElementInputEvent
-     * @class Represents an input event fired on a {@link pc.ElementComponent}. When an event is raised on an ElementComponent it bubbles up to its parent ElementComponents unless we call stopPropagation().
+     * @classdesc Represents an input event fired on a {@link pc.ElementComponent}. When an event is raised
+     * on an ElementComponent it bubbles up to its parent ElementComponents unless we call stopPropagation().
      * @description Create an instance of a pc.ElementInputEvent.
      * @param {MouseEvent|TouchEvent} event The MouseEvent or TouchEvent that was originally raised.
+     * @param {pc.ElementComponent} element The ElementComponent that this event was originally raised on.
      * @property {MouseEvent|TouchEvent} event The MouseEvent or TouchEvent that was originally raised.
      * @property {pc.ElementComponent} element The ElementComponent that this event was originally raised on.
      */
@@ -76,8 +84,9 @@ pc.extend(pc, function () {
     };
 
     /**
+     * @constructor
      * @name pc.ElementMouseEvent
-     * @class Represents a Mouse event fired on a {@link pc.ElementComponent}.
+     * @classdesc Represents a Mouse event fired on a {@link pc.ElementComponent}.
      * @extends pc.ElementInputEvent
      * @description Create an instance of a pc.ElementMouseEvent.
      * @param {MouseEvent} event The MouseEvent that was originally raised.
@@ -128,8 +137,9 @@ pc.extend(pc, function () {
     ElementMouseEvent = pc.inherits(ElementMouseEvent, ElementInputEvent);
 
     /**
+     * @constructor
      * @name pc.ElementTouchEvent
-     * @class Represents a TouchEvent fired on a {@link pc.ElementComponent}.
+     * @classdesc Represents a TouchEvent fired on a {@link pc.ElementComponent}.
      * @extends pc.ElementInputEvent
      * @description Create an instance of a pc.ElementTouchEvent.
      * @param {TouchEvent} event The TouchEvent that was originally raised.
@@ -146,8 +156,9 @@ pc.extend(pc, function () {
     ElementTouchEvent = pc.inherits(ElementTouchEvent, ElementInputEvent);
 
     /**
+     * @constructor
      * @name pc.ElementInput
-     * @class Handles mouse and touch events for {@link pc.ElementComponent}s. When input events
+     * @classdesc Handles mouse and touch events for {@link pc.ElementComponent}s. When input events
      * occur on an ElementComponent this fires the appropriate events on the ElementComponent.
      * @description Create a new pc.ElementInput instance.
      * @param {Element} domElement The DOM element
@@ -197,17 +208,17 @@ pc.extend(pc, function () {
             this._target = domElement;
             this._attached = true;
 
-            window.addEventListener('mouseup', this._upHandler, {passive: true});
-            window.addEventListener('mousedown', this._downHandler, {passive: true});
-            window.addEventListener('mousemove', this._moveHandler, {passive: true});
-            window.addEventListener('mousewheel', this._wheelHandler, {passive: true});
-            window.addEventListener('DOMMouseScroll', this._wheelHandler, {passive: true});
+            window.addEventListener('mouseup', this._upHandler, { passive: true });
+            window.addEventListener('mousedown', this._downHandler, { passive: true });
+            window.addEventListener('mousemove', this._moveHandler, { passive: true });
+            window.addEventListener('mousewheel', this._wheelHandler, { passive: true });
+            window.addEventListener('DOMMouseScroll', this._wheelHandler, { passive: true });
 
             if ('ontouchstart' in window) {
-                this._target.addEventListener('touchstart', this._touchstartHandler, {passive: true});
-                this._target.addEventListener('touchend', this._touchendHandler, {passive: true});
+                this._target.addEventListener('touchstart', this._touchstartHandler, { passive: true });
+                this._target.addEventListener('touchend', this._touchendHandler, { passive: true });
                 this._target.addEventListener('touchmove', this._touchmoveHandler, false);
-                this._target.addEventListener('touchcancel', this._touchcancelHandler, {passive: true});
+                this._target.addEventListener('touchcancel', this._touchcancelHandler, { passive: true });
             }
         },
 
@@ -219,7 +230,6 @@ pc.extend(pc, function () {
         detach: function () {
             if (! this._attached) return;
             this._attached = false;
-            this._target = null;
 
             window.removeEventListener('mouseup', this._upHandler, false);
             window.removeEventListener('mousedown', this._downHandler, false);
@@ -231,6 +241,8 @@ pc.extend(pc, function () {
             this._target.removeEventListener('touchend', this._touchendHandler, false);
             this._target.removeEventListener('touchmove', this._touchmoveHandler, false);
             this._target.removeEventListener('touchcancel', this._touchcancelHandler, false);
+
+            this._target = null;
         },
 
         /**
@@ -299,15 +311,16 @@ pc.extend(pc, function () {
 
         _handleTouchStart: function (event) {
             var cameras = this.app.systems.camera.cameras;
+            var i, j, len;
 
             // check cameras from last to front
             // so that elements that are drawn above others
             // receive events first
-            for (var i = cameras.length - 1; i >= 0; i--) {
+            for (i = cameras.length - 1; i >= 0; i--) {
                 var camera = cameras[i];
 
                 var done = 0;
-                for (var j = 0, len = event.changedTouches.length; j < len; j++) {
+                for (j = 0, len = event.changedTouches.length; j < len; j++) {
                     if (this._touchedElements[event.changedTouches[j].identifier]) {
                         done++;
                         continue;
@@ -481,8 +494,6 @@ pc.extend(pc, function () {
         _calcTouchCoords: function (touch) {
             var totalOffsetX = 0;
             var totalOffsetY = 0;
-            var canvasX = 0;
-            var canvasY = 0;
             var target = touch.target;
             while (!(target instanceof HTMLElement)) {
                 target = target.parentNode;
@@ -609,8 +620,9 @@ pc.extend(pc, function () {
 
                 // 3D screen
                 var worldCorners = element.worldCorners;
-                var start = camera.entity.getPosition();
-                var end = vecA;
+                var start = vecA;
+                var end = vecB;
+                camera.screenToWorld(_x, _y, camera.nearClip, start);
                 camera.screenToWorld(_x, _y, camera.farClip, end);
 
                 if (intersectLineQuad(start, end, worldCorners)) {

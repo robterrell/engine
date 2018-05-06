@@ -11,11 +11,14 @@ pc.extend(pc, function () {
         this._fontAsset = null;
         this._font = null;
 
-        this._color = new pc.Color(1,1,1,1);
+        this._color = new pc.Color(1, 1, 1, 1);
 
         this._spacing = 1;
         this._fontSize = 32;
         this._lineHeight = 32;
+        this._wrapLines = false;
+
+        this._drawOrder = 0;
 
         this._alignment = new pc.Vec2(0.5, 0.5);
 
@@ -36,6 +39,9 @@ pc.extend(pc, function () {
 
         this._noResize = false; // flag used to disable resizing events
 
+        this._currentMaterialType = null; // save the material type (screenspace or not) to prevent overwriting
+        this._maskedMaterialSrc = null; // saved material that was assigned before element was masked
+
         // initialize based on screen
         this._onScreenChange(this._element.screen);
 
@@ -47,10 +53,14 @@ pc.extend(pc, function () {
         element.on('set:pivot', this._onPivotChange, this);
     };
 
+    var LINE_BREAK_CHAR = /^[\r\n]$/;
+    var WHITESPACE_CHAR = /^[ \t]$/;
+    var WORD_BOUNDARY_CHAR = /^[ \t\-]$/;
+
     pc.extend(TextElement.prototype, {
         destroy: function () {
             if (this._model) {
-                this._system.app.scene.removeModel(this._model);
+                this._element.removeModelFromLayers(this._model);
                 this._model.destroy();
                 this._model = null;
             }
@@ -83,7 +93,10 @@ pc.extend(pc, function () {
             this._drawOrder = order;
 
             if (this._model) {
-                for (var i = 0, len = this._model.meshInstances.length; i<len; i++) {
+                var i;
+                var len;
+
+                for (i = 0, len = this._model.meshInstances.length; i < len; i++) {
                     this._model.meshInstances[i].drawOrder = order;
                 }
             }
@@ -95,6 +108,9 @@ pc.extend(pc, function () {
         },
 
         _updateText: function (text) {
+            var i;
+            var len;
+
             if (text === undefined) text = this._text;
 
             var textLength = text.length;
@@ -106,7 +122,7 @@ pc.extend(pc, function () {
 
             var charactersPerTexture = {};
 
-            for (var i = 0; i<textLength; i++) {
+            for (i = 0; i < textLength; i++) {
                 var code = text.charCodeAt(i);
                 var info = this._font.data.chars[code];
                 if (! info) continue;
@@ -119,24 +135,24 @@ pc.extend(pc, function () {
                 charactersPerTexture[map]++;
             }
 
-            var removedModel = ! this._system.app.scene.containsModel(this._model);
+            var removedModel = false;
 
             var screenSpace = (this._element.screen && this._element.screen.screen.screenSpace);
 
-            for (var i = 0, len = this._meshInfo.length; i<len; i++) {
+            for (i = 0, len = this._meshInfo.length; i < len; i++) {
                 var l = charactersPerTexture[i] || 0;
                 var meshInfo = this._meshInfo[i];
 
                 if (meshInfo.count !== l) {
                     if (! removedModel) {
-                        this._system.app.scene.removeModel(this._model);
+                        this._element.removeModelFromLayers(this._model);
                         removedModel = true;
                     }
 
                     meshInfo.count = l;
-                    meshInfo.positions.length = meshInfo.normals.length = l*3*4;
-                    meshInfo.indices.length = l*3*2;
-                    meshInfo.uvs.length = l*2*4;
+                    meshInfo.positions.length = meshInfo.normals.length = l * 3 * 4;
+                    meshInfo.indices.length = l * 3 * 2;
+                    meshInfo.uvs.length = l * 2 * 4;
 
                     // destroy old mesh
                     if (meshInfo.meshInstance) {
@@ -153,31 +169,31 @@ pc.extend(pc, function () {
                     for (var v = 0; v < l; v++) {
                         // create index and normal arrays since they don't change
                         // if the length doesn't change
-                        meshInfo.indices[v*3*2+0] = v*4;
-                        meshInfo.indices[v*3*2+1] = v*4 + 1;
-                        meshInfo.indices[v*3*2+2] = v*4 + 3;
-                        meshInfo.indices[v*3*2+3] = v*4 + 2;
-                        meshInfo.indices[v*3*2+4] = v*4 + 3;
-                        meshInfo.indices[v*3*2+5] = v*4 + 1;
+                        meshInfo.indices[v * 3 * 2 + 0] = v * 4;
+                        meshInfo.indices[v * 3 * 2 + 1] = v * 4 + 1;
+                        meshInfo.indices[v * 3 * 2 + 2] = v * 4 + 3;
+                        meshInfo.indices[v * 3 * 2 + 3] = v * 4 + 2;
+                        meshInfo.indices[v * 3 * 2 + 4] = v * 4 + 3;
+                        meshInfo.indices[v * 3 * 2 + 5] = v * 4 + 1;
 
-                        meshInfo.normals[v*4*3+0] = 0;
-                        meshInfo.normals[v*4*3+1] = 0;
-                        meshInfo.normals[v*4*3+2] = -1;
+                        meshInfo.normals[v * 4 * 3 + 0] = 0;
+                        meshInfo.normals[v * 4 * 3 + 1] = 0;
+                        meshInfo.normals[v * 4 * 3 + 2] = -1;
 
-                        meshInfo.normals[v*4*3+3] = 0;
-                        meshInfo.normals[v*4*3+4] = 0;
-                        meshInfo.normals[v*4*3+5] = -1;
+                        meshInfo.normals[v * 4 * 3 + 3] = 0;
+                        meshInfo.normals[v * 4 * 3 + 4] = 0;
+                        meshInfo.normals[v * 4 * 3 + 5] = -1;
 
-                        meshInfo.normals[v*4*3+6] = 0;
-                        meshInfo.normals[v*4*3+7] = 0;
-                        meshInfo.normals[v*4*3+8] = -1;
+                        meshInfo.normals[v * 4 * 3 + 6] = 0;
+                        meshInfo.normals[v * 4 * 3 + 7] = 0;
+                        meshInfo.normals[v * 4 * 3 + 8] = -1;
 
-                        meshInfo.normals[v*4*3+9] = 0;
-                        meshInfo.normals[v*4*3+10] = 0;
-                        meshInfo.normals[v*4*3+11] = -1;
+                        meshInfo.normals[v * 4 * 3 + 9] = 0;
+                        meshInfo.normals[v * 4 * 3 + 10] = 0;
+                        meshInfo.normals[v * 4 * 3 + 11] = -1;
                     }
 
-                    var mesh = pc.createMesh(this._system.app.graphicsDevice, meshInfo.positions, {uvs: meshInfo.uvs, normals: meshInfo.normals, indices: meshInfo.indices});
+                    var mesh = pc.createMesh(this._system.app.graphicsDevice, meshInfo.positions, { uvs: meshInfo.uvs, normals: meshInfo.normals, indices: meshInfo.indices });
 
                     var mi = new pc.MeshInstance(this._node, mesh, this._material);
                     mi.castShadow = false;
@@ -185,7 +201,7 @@ pc.extend(pc, function () {
 
                     mi.drawOrder = this._drawOrder;
                     if (screenSpace) {
-                        mi.layer = pc.scene.LAYER_HUD;
+                        mi.cull = false;
                     }
                     mi.screenSpace = screenSpace;
                     mi.setParameter("texture_msdfMap", this._font.textures[i]);
@@ -198,24 +214,35 @@ pc.extend(pc, function () {
                     meshInfo.meshInstance = mi;
 
                     this._model.meshInstances.push(mi);
+
                 }
             }
 
+            // after creating new meshes
+            // re-apply masking stencil params
+            if (this._maskedBy) {
+                this._element._setMaskedBy(this._maskedBy);
+            }
+
             if (removedModel && this._element.enabled && this._entity.enabled) {
-                this._system.app.scene.addModel(this._model);
+                this._element.addModelToLayers(this._model);
             }
 
             this._updateMeshes(text);
         },
 
         _removeMeshInstance: function (meshInstance) {
+            var ib;
+            var iblen;
+
             var oldMesh = meshInstance.mesh;
             if (oldMesh) {
                 if (oldMesh.vertexBuffer) {
                     oldMesh.vertexBuffer.destroy();
                 }
+
                 if (oldMesh.indexBuffer) {
-                    for (var ib = 0, iblen = oldMesh.indexBuffer.length; ib<iblen; ib++)
+                    for (ib = 0, iblen = oldMesh.indexBuffer.length; ib < iblen; ib++)
                         oldMesh.indexBuffer[ib].destroy();
                 }
             }
@@ -225,21 +252,34 @@ pc.extend(pc, function () {
                 this._model.meshInstances.splice(idx, 1);
         },
 
+        _setMaterial: function (material) {
+            var i;
+            var len;
+
+            this._material = material;
+            if (this._model) {
+                for (i = 0, len = this._model.meshInstances.length; i < len; i++) {
+                    var mi = this._model.meshInstances[i];
+                    mi.material = material;
+                }
+            }
+        },
+
         _updateMaterial: function (screenSpace) {
-            var layer;
+            var cull;
 
             if (screenSpace) {
                 this._material = this._system.defaultScreenSpaceTextMaterial;
-                layer = pc.scene.LAYER_HUD;
+                cull = false;
             } else {
                 this._material = this._system.defaultTextMaterial;
-                layer = pc.scene.LAYER_WORLD;
+                cull = true;
             }
 
             if (this._model) {
-                for (var i = 0, len = this._model.meshInstances.length; i<len; i++) {
+                for (var i = 0, len = this._model.meshInstances.length; i < len; i++) {
                     var mi = this._model.meshInstances[i];
-                    mi.layer = layer;
+                    mi.cull = cull;
                     mi.material = this._material;
                     mi.screenSpace = screenSpace;
                 }
@@ -248,18 +288,31 @@ pc.extend(pc, function () {
 
         _updateMeshes: function (text) {
             var json = this._font.data;
+            var self = this;
 
             this.width = 0;
             this.height = 0;
-            var lineWidths = [];
+            this._lineWidths = [];
+            this._lineContents = [];
 
             var l = text.length;
             var _x = 0; // cursors
+            var _xMinusTrailingWhitespace = 0;
             var _y = 0;
             var _z = 0;
 
             var lines = 1;
-            var lastLine = 0;
+            var wordStartX = 0;
+            var wordStartIndex = 0;
+            var lineStartIndex = 0;
+            var numWordsThisLine = 0;
+            var numCharsThisLine = 0;
+            var splitHorizontalAnchors = Math.abs(this._element.anchor.x - this._element.anchor.z) >= 0.0001;
+
+            var maxLineWidth = this._element.calculatedWidth;
+            if ((this.autoWidth && !splitHorizontalAnchors) || !this._wrapLines) {
+                maxLineWidth = Number.POSITIVE_INFINITY;
+            }
 
             // todo: move this into font asset?
             // calculate max font extents from all available chars
@@ -268,12 +321,12 @@ pc.extend(pc, function () {
             var scale = 1;
             var MAGIC = 32;
 
-            var char, data, i;
+            var char, charCode, data, i, quad;
 
             // TODO: Optimize this as it loops through all the chars in the asset
             // every time the text changes...
-            for (char in json.chars) {
-                data = json.chars[char];
+            for (charCode in json.chars) {
+                data = json.chars[charCode];
                 scale = (data.height / MAGIC) * this._fontSize / data.height;
                 if (data.bounds) {
                     fontMinY = Math.min(fontMinY, data.bounds[1] * scale);
@@ -286,20 +339,22 @@ pc.extend(pc, function () {
                 this._meshInfo[i].lines = {};
             }
 
+            function breakLine(lineBreakIndex, lineBreakX) {
+                self._lineWidths.push(lineBreakX);
+                self._lineContents.push(text.substring(lineStartIndex, lineBreakIndex));
+
+                _x = 0;
+                _y -= self._lineHeight;
+                lines++;
+                numWordsThisLine = 0;
+                numCharsThisLine = 0;
+                wordStartX = 0;
+                lineStartIndex = lineBreakIndex;
+            }
+
             for (i = 0; i < l; i++) {
-                char = text.charCodeAt(i);
-
-                if (char === 10 || char === 13) {
-                    // add forced line-break
-                    _y -= this._lineHeight;
-                    _x = 0;
-                    lines++;
-                    lastLine = lines;
-                    lineWidths.push(0);
-                    continue;
-                }
-
-                lineWidths[lines-1] = 0;
+                char = text.charAt(i);
+                charCode = text.charCodeAt(i);
 
                 var x = 0;
                 var y = 0;
@@ -308,11 +363,11 @@ pc.extend(pc, function () {
                 var glyphMinX = 0;
                 var glyphWidth = 0;
 
-                data = json.chars[char];
+                data = json.chars[charCode];
                 if (data && data.scale) {
                     var size = (data.width + data.height) / 2;
-                    scale = (size/MAGIC) * this._fontSize / size;
-                    quadsize = (size/MAGIC) * this._fontSize / data.scale;
+                    scale = (size / MAGIC) * this._fontSize / size;
+                    quadsize = (size / MAGIC) * this._fontSize / data.scale;
                     advance = data.xadvance * scale;
                     x = data.xoffset * scale;
                     y = data.yoffset * scale;
@@ -332,49 +387,104 @@ pc.extend(pc, function () {
                     quadsize = this._fontSize;
                 }
 
+                var isLineBreak = LINE_BREAK_CHAR.test(char);
+                var isWordBoundary = WORD_BOUNDARY_CHAR.test(char);
+                var isWhitespace = WHITESPACE_CHAR.test(char);
+
+                if (isLineBreak) {
+                    breakLine(i, _xMinusTrailingWhitespace);
+                    wordStartIndex = i + 1;
+                    lineStartIndex = i + 1;
+                    continue;
+                }
+
                 var meshInfo = this._meshInfo[(data && data.map) || 0];
-                var quad = meshInfo.quad;
-                meshInfo.lines[lines-1] = quad;
+                var candidateLineWidth = _x + glyphWidth + glyphMinX;
 
-                meshInfo.positions[quad*4*3+0] = _x - x;
-                meshInfo.positions[quad*4*3+1] = _y - y;
-                meshInfo.positions[quad*4*3+2] = _z;
+                // If we've exceeded the maximum line width, move everything from the beginning of
+                // the current word onwards down onto a new line.
+                if (candidateLineWidth >= maxLineWidth && numCharsThisLine > 0 && !isWhitespace) {
+                    // Handle the case where a line containing only a single long word needs to be
+                    // broken onto multiple lines.
+                    if (numWordsThisLine === 0) {
+                        wordStartIndex = i;
+                        breakLine(i, _xMinusTrailingWhitespace);
+                    } else {
+                        // Move back to the beginning of the current word.
+                        var backtrack = Math.max(i - wordStartIndex, 0);
+                        i -= backtrack + 1;
+                        meshInfo.lines[lines - 1] -= backtrack;
+                        meshInfo.quad -= backtrack;
 
-                meshInfo.positions[quad*4*3+3] = _x - x + quadsize;
-                meshInfo.positions[quad*4*3+4] = _y - y;
-                meshInfo.positions[quad*4*3+5] = _z;
+                        breakLine(wordStartIndex, wordStartX);
+                        continue;
+                    }
+                }
 
-                meshInfo.positions[quad*4*3+6] = _x - x + quadsize;
-                meshInfo.positions[quad*4*3+7] = _y - y + quadsize;
-                meshInfo.positions[quad*4*3+8] = _z;
+                quad = meshInfo.quad;
+                meshInfo.lines[lines - 1] = quad;
 
-                meshInfo.positions[quad*4*3+9]  = _x - x;
-                meshInfo.positions[quad*4*3+10] = _y - y + quadsize;
-                meshInfo.positions[quad*4*3+11] = _z;
+                meshInfo.positions[quad * 4 * 3 + 0] = _x - x;
+                meshInfo.positions[quad * 4 * 3 + 1] = _y - y;
+                meshInfo.positions[quad * 4 * 3 + 2] = _z;
+
+                meshInfo.positions[quad * 4 * 3 + 3] = _x - x + quadsize;
+                meshInfo.positions[quad * 4 * 3 + 4] = _y - y;
+                meshInfo.positions[quad * 4 * 3 + 5] = _z;
+
+                meshInfo.positions[quad * 4 * 3 + 6] = _x - x + quadsize;
+                meshInfo.positions[quad * 4 * 3 + 7] = _y - y + quadsize;
+                meshInfo.positions[quad * 4 * 3 + 8] = _z;
+
+                meshInfo.positions[quad * 4 * 3 + 9]  = _x - x;
+                meshInfo.positions[quad * 4 * 3 + 10] = _y - y + quadsize;
+                meshInfo.positions[quad * 4 * 3 + 11] = _z;
 
 
                 this.width = Math.max(this.width, _x + glyphWidth + glyphMinX);
-                lineWidths[lines-1] = Math.max(lineWidths[lines-1], _x + glyphWidth + glyphMinX);
-                this.height = Math.max(this.height, fontMaxY - (_y+fontMinY));
+                this.height = Math.max(this.height, fontMaxY - (_y + fontMinY));
 
                 // advance cursor
-                _x = _x + (this._spacing*advance);
+                _x = _x + (this._spacing * advance);
 
-                var uv = this._getUv(char);
+                // For proper alignment handling when a line wraps _on_ a whitespace character,
+                // we need to keep track of the width of the line without any trailing whitespace
+                // characters. This applies to both single whitespaces and also multiple sequential
+                // whitespaces.
+                if (!isWhitespace && !isLineBreak) {
+                    _xMinusTrailingWhitespace = _x;
+                }
 
-                meshInfo.uvs[quad*4*2+0] = uv[0];
-                meshInfo.uvs[quad*4*2+1] = uv[1];
+                if (isWordBoundary) {
+                    numWordsThisLine++;
+                    wordStartX = _xMinusTrailingWhitespace;
+                    wordStartIndex = i + 1;
+                }
 
-                meshInfo.uvs[quad*4*2+2] = uv[2];
-                meshInfo.uvs[quad*4*2+3] = uv[1];
+                numCharsThisLine++;
 
-                meshInfo.uvs[quad*4*2+4] = uv[2];
-                meshInfo.uvs[quad*4*2+5] = uv[3];
+                var uv = this._getUv(charCode);
 
-                meshInfo.uvs[quad*4*2+6] = uv[0];
-                meshInfo.uvs[quad*4*2+7] = uv[3];
+                meshInfo.uvs[quad * 4 * 2 + 0] = uv[0];
+                meshInfo.uvs[quad * 4 * 2 + 1] = uv[1];
+
+                meshInfo.uvs[quad * 4 * 2 + 2] = uv[2];
+                meshInfo.uvs[quad * 4 * 2 + 3] = uv[1];
+
+                meshInfo.uvs[quad * 4 * 2 + 4] = uv[2];
+                meshInfo.uvs[quad * 4 * 2 + 5] = uv[3];
+
+                meshInfo.uvs[quad * 4 * 2 + 6] = uv[0];
+                meshInfo.uvs[quad * 4 * 2 + 7] = uv[3];
 
                 meshInfo.quad++;
+            }
+
+            // As we only break lines when the text becomes too wide for the container,
+            // there will almost always be some leftover text on the final line which has
+            // not yet been pushed to _lineContents.
+            if (lineStartIndex < l) {
+                breakLine(l, _x);
             }
 
             // force autoWidth / autoHeight change to update width/height of element
@@ -395,30 +505,30 @@ pc.extend(pc, function () {
                 var prevQuad = 0;
                 for (var line in this._meshInfo[i].lines) {
                     var index = this._meshInfo[i].lines[line];
-                    var hoffset = - hp * this._element.width + ha * (this._element.width - lineWidths[parseInt(line,10)]);
-                    var voffset = (1 - vp) * this._element.height - fontMaxY - (1 - va) * (this._element.height - this.height);
+                    var hoffset = - hp * this._element.calculatedWidth + ha * (this._element.calculatedWidth - this._lineWidths[parseInt(line, 10)]);
+                    var voffset = (1 - vp) * this._element.calculatedHeight - fontMaxY - (1 - va) * (this._element.calculatedHeight - this.height);
 
-                    for (var quad = prevQuad; quad <= index; quad++) {
-                        this._meshInfo[i].positions[quad*4*3] += hoffset;
-                        this._meshInfo[i].positions[quad*4*3 + 3] += hoffset;
-                        this._meshInfo[i].positions[quad*4*3 + 6] += hoffset;
-                        this._meshInfo[i].positions[quad*4*3 + 9] += hoffset;
+                    for (quad = prevQuad; quad <= index; quad++) {
+                        this._meshInfo[i].positions[quad * 4 * 3] += hoffset;
+                        this._meshInfo[i].positions[quad * 4 * 3 + 3] += hoffset;
+                        this._meshInfo[i].positions[quad * 4 * 3 + 6] += hoffset;
+                        this._meshInfo[i].positions[quad * 4 * 3 + 9] += hoffset;
 
-                        this._meshInfo[i].positions[quad*4*3 + 1] += voffset;
-                        this._meshInfo[i].positions[quad*4*3 + 4] += voffset;
-                        this._meshInfo[i].positions[quad*4*3 + 7] += voffset;
-                        this._meshInfo[i].positions[quad*4*3 + 10] += voffset;
+                        this._meshInfo[i].positions[quad * 4 * 3 + 1] += voffset;
+                        this._meshInfo[i].positions[quad * 4 * 3 + 4] += voffset;
+                        this._meshInfo[i].positions[quad * 4 * 3 + 7] += voffset;
+                        this._meshInfo[i].positions[quad * 4 * 3 + 10] += voffset;
                     }
 
                     prevQuad = index + 1;
                 }
 
                 // update vertex buffer
-                var numVertices = this._meshInfo[i].quad*4;
+                var numVertices = this._meshInfo[i].quad * 4;
                 var it = new pc.VertexIterator(this._meshInfo[i].meshInstance.mesh.vertexBuffer);
                 for (var v = 0; v < numVertices; v++) {
-                    it.element[pc.SEMANTIC_POSITION].set(this._meshInfo[i].positions[v*3+0], this._meshInfo[i].positions[v*3+1], this._meshInfo[i].positions[v*3+2]);
-                    it.element[pc.SEMANTIC_TEXCOORD0].set(this._meshInfo[i].uvs[v*2+0], this._meshInfo[i].uvs[v*2+1]);
+                    it.element[pc.SEMANTIC_POSITION].set(this._meshInfo[i].positions[v * 3 + 0], this._meshInfo[i].positions[v * 3 + 1], this._meshInfo[i].positions[v * 3 + 2]);
+                    it.element[pc.SEMANTIC_TEXCOORD0].set(this._meshInfo[i].uvs[v * 2 + 0], this._meshInfo[i].uvs[v * 2 + 1]);
                     it.next();
                 }
                 it.end();
@@ -461,7 +571,7 @@ pc.extend(pc, function () {
                 this._font.data = _new;
 
                 var maps = this._font.data.info.maps.length;
-                for (var i = 0; i<maps; i++) {
+                for (var i = 0; i < maps; i++) {
                     if (! this._meshInfo[i]) continue;
 
                     var mi = this._meshInfo[i].meshInstance;
@@ -499,7 +609,7 @@ pc.extend(pc, function () {
                     return this._getUv(32);
                 }
                 // otherwise - missing char
-                return [0,0,1,1];
+                return [0, 0, 1, 1];
             }
 
             var map = data.chars[char].map;
@@ -524,14 +634,14 @@ pc.extend(pc, function () {
         },
 
         onEnable: function () {
-            if (this._model && !this._system.app.scene.containsModel(this._model)) {
-                this._system.app.scene.addModel(this._model);
+            if (this._model) {
+                this._element.addModelToLayers(this._model);
             }
         },
 
         onDisable: function () {
-            if (this._model && this._system.app.scene.containsModel(this._model)) {
-                this._system.app.scene.removeModel(this._model);
+            if (this._model) {
+                this._element.removeModelFromLayers(this._model);
             }
         }
     });
@@ -563,7 +673,7 @@ pc.extend(pc, function () {
             this._color.data[2] = value.data[2];
 
             if (this._model) {
-                for (var i = 0, len = this._model.meshInstances.length; i<len; i++) {
+                for (var i = 0, len = this._model.meshInstances.length; i < len; i++) {
                     var mi = this._model.meshInstances[i];
                     mi.setParameter('material_emissive', this._color.data3);
                 }
@@ -580,7 +690,7 @@ pc.extend(pc, function () {
             this._color.data[3] = value;
 
             if (this._model) {
-                for (var i = 0, len = this._model.meshInstances.length; i<len; i++) {
+                for (var i = 0, len = this._model.meshInstances.length; i < len; i++) {
                     var mi = this._model.meshInstances[i];
                     mi.setParameter('material_opacity', value);
                 }
@@ -599,6 +709,26 @@ pc.extend(pc, function () {
             if (_prev !== value && this._font) {
                 this._updateText();
             }
+        }
+    });
+
+    Object.defineProperty(TextElement.prototype, "wrapLines", {
+        get: function () {
+            return this._wrapLines;
+        },
+
+        set: function (value) {
+            var _prev = this._wrapLines;
+            this._wrapLines = value;
+            if (_prev !== value && this._font) {
+                this._updateText();
+            }
+        }
+    });
+
+    Object.defineProperty(TextElement.prototype, "lines", {
+        get: function () {
+            return this._lineContents;
         }
     });
 
@@ -673,12 +803,15 @@ pc.extend(pc, function () {
         },
 
         set: function (value) {
+            var i;
+            var len;
+
             this._font = value;
             if (! value) return;
 
             // make sure we have as many meshInfo entries
             // as the number of font textures
-            for (var i = 0, len = this._font.textures.length; i<len; i++) {
+            for (i = 0, len = this._font.textures.length; i < len; i++) {
                 if (! this._meshInfo[i]) {
                     this._meshInfo[i] = {
                         count: 0,
@@ -704,12 +837,12 @@ pc.extend(pc, function () {
 
             // destroy any excess mesh instances
             var removedModel = false;
-            for (var i = this._font.textures.length; i < this._meshInfo.length; i++) {
+            for (i = this._font.textures.length; i < this._meshInfo.length; i++) {
                 if (this._meshInfo[i].meshInstance) {
                     if (! removedModel) {
                         // remove model from scene so that excess mesh instances are removed
                         // from the scene as well
-                        this._system.app.scene.removeModel(this._model);
+                        this._element.removeModelFromLayers(this._model);
                         removedModel = true;
                     }
                     this._removeMeshInstance(this._meshInfo[i].meshInstance);
@@ -747,7 +880,10 @@ pc.extend(pc, function () {
 
         set: function (value) {
             this._autoWidth = value;
-            if (value) {
+
+            // change width of element to match text width but only if the element
+            // does not have split horizontal anchors
+            if (value && Math.abs(this._element.anchor.x - this._element.anchor.z) < 0.0001) {
                 this._element.width = this.width;
             }
         }
@@ -760,7 +896,10 @@ pc.extend(pc, function () {
 
         set: function (value) {
             this._autoHeight = value;
-            if (value) {
+
+            // change height of element to match text height but only if the element
+            // does not have split vertical anchors
+            if (value && Math.abs(this._element.anchor.y - this._element.anchor.w) < 0.0001) {
                 this._element.height = this.height;
             }
         }
