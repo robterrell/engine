@@ -1,4 +1,4 @@
-pc.extend(pc, function () {
+Object.assign(pc, function () {
     var _schema = [
         'enabled',
         'clearColorBuffer',
@@ -39,9 +39,10 @@ pc.extend(pc, function () {
      * @extends pc.ComponentSystem
      */
     var CameraComponentSystem = function (app) {
+        pc.ComponentSystem.call(this, app);
+
         this.id = 'camera';
         this.description = "Renders the scene from the location of the Entity.";
-        app.systems.add(this.id, this);
 
         this.ComponentType = pc.CameraComponent;
         this.DataType = pc.CameraComponentData;
@@ -53,14 +54,16 @@ pc.extend(pc, function () {
 
         this.on('beforeremove', this.onBeforeRemove, this);
         this.on('remove', this.onRemove, this);
+        this.app.on("prerender", this.onPrerender, this);
 
-        pc.ComponentSystem.on('update', this.onUpdate, this);
+        pc.ComponentSystem.bind('update', this.onUpdate, this);
     };
-    CameraComponentSystem = pc.inherits(CameraComponentSystem, pc.ComponentSystem);
+    CameraComponentSystem.prototype = Object.create(pc.ComponentSystem.prototype);
+    CameraComponentSystem.prototype.constructor = CameraComponentSystem;
 
     pc.Component._buildAccessors(pc.CameraComponent.prototype, _schema);
 
-    pc.extend(CameraComponentSystem.prototype, {
+    Object.assign(CameraComponentSystem.prototype, {
         initializeComponentData: function (component, _data, properties) {
             properties = [
                 'postEffects',
@@ -93,9 +96,10 @@ pc.extend(pc, function () {
 
             // duplicate data because we're modifying the data
             var data = {};
-            properties.forEach(function (prop) {
-                data[prop] = _data[prop];
-            });
+            for (var i = 0, len = properties.length; i < len; i++) {
+                var property = properties[i];
+                data[property] = _data[property];
+            }
 
             if (data.layers && pc.type(data.layers) === 'array') {
                 data.layers = data.layers.slice(0);
@@ -126,13 +130,13 @@ pc.extend(pc, function () {
             data.camera._component = component;
 
             var self = component;
-            data.camera.calculateTransform = function(mat, mode) {
+            data.camera.calculateTransform = function (mat, mode) {
                 if (!self._calculateTransform)
                     return null;
 
                 return self._calculateTransform(mat, mode);
             };
-            data.camera.calculateProjection = function(mat, mode) {
+            data.camera.calculateProjection = function (mat, mode) {
                 if (!self._calculateProjection)
                     return null;
 
@@ -141,11 +145,12 @@ pc.extend(pc, function () {
 
             data.postEffects = new pc.PostEffectQueue(this.app, component);
 
-            CameraComponentSystem._super.initializeComponentData.call(this, component, data, properties);
+            pc.ComponentSystem.prototype.initializeComponentData.call(this, component, data, properties);
         },
 
         onBeforeRemove: function (entity, component) {
             this.removeCamera(component);
+            component.onRemove();
         },
 
         onRemove: function (entity, data) {
@@ -170,10 +175,16 @@ pc.extend(pc, function () {
                         if (cam._node) {
                             cam._node.localTransform.copy(vrDisplay.combinedViewInv);
                             cam._node._dirtyLocal = false;
-                            cam._node._dirtify();
+                            cam._node._dirtifyWorld();
                         }
                     }
                 }
+            }
+        },
+
+        onPrerender: function () {
+            for (var i = 0, len = this.cameras.length; i < len; i++) {
+                this.cameras[i].onPrerender();
             }
         },
 

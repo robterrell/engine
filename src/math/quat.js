@@ -1,4 +1,4 @@
-pc.extend(pc, (function () {
+Object.assign(pc, (function () {
     'use strict';
 
     /**
@@ -82,7 +82,7 @@ pc.extend(pc, (function () {
      * quat.w = 0;
      */
 
-    Quat.prototype = {
+    Object.assign(Quat.prototype, {
         /**
          * @function
          * @name pc.Quat#clone
@@ -249,14 +249,7 @@ pc.extend(pc, (function () {
          * console.log("The length of the quaternion is: " + len);
          */
         length: function () {
-            var x, y, z, w;
-
-            x = this.x;
-            y = this.y;
-            z = this.z;
-            w = this.w;
-
-            return Math.sqrt(x * x + y * y + z * z + w * w);
+            return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z + this.w * this.w);
         },
 
         /**
@@ -271,8 +264,7 @@ pc.extend(pc, (function () {
          * console.log("The length squared of the quaternion is: " + lenSq);
          */
         lengthSq: function () {
-            var x, y, z, w;
-            return x * x + y * y + z * z + w * w;
+            return this.x * this.x + this.y * this.y + this.z * this.z + this.w * this.w;
         },
 
         /**
@@ -702,7 +694,7 @@ pc.extend(pc, (function () {
         toString: function () {
             return '[' + this.x + ', ' + this.y + ', ' + this.z + ', ' + this.w + ']';
         }
-    };
+    });
 
     /**
      * @field

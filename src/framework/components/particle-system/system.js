@@ -1,4 +1,4 @@
-pc.extend(pc, function() {
+Object.assign(pc, function () {
     var _schema = [
         'enabled',
         'autoPlay',
@@ -30,6 +30,7 @@ pc.extend(pc, function() {
         'colorMapAsset',
         'normalMapAsset',
         'mesh',
+        'meshAsset',
         'localVelocityGraph',
         'localVelocityGraph2',
         'velocityGraph',
@@ -61,9 +62,10 @@ pc.extend(pc, function() {
      * @extends pc.ComponentSystem
      */
     var ParticleSystemComponentSystem = function ParticleSystemComponentSystem(app) {
+        pc.ComponentSystem.call(this, app);
+
         this.id = 'particlesystem';
         this.description = "Updates and renders particle system in the scene.";
-        app.systems.add(this.id, this);
 
         this.ComponentType = pc.ParticleSystemComponent;
         this.DataType = pc.ParticleSystemComponentData;
@@ -88,20 +90,29 @@ pc.extend(pc, function() {
         };
 
         this.on('beforeremove', this.onRemove, this);
-        pc.ComponentSystem.on('update', this.onUpdate, this);
+        pc.ComponentSystem.bind('update', this.onUpdate, this);
     };
-    ParticleSystemComponentSystem = pc.inherits(ParticleSystemComponentSystem, pc.ComponentSystem);
+    ParticleSystemComponentSystem.prototype = Object.create(pc.ComponentSystem.prototype);
+    ParticleSystemComponentSystem.prototype.constructor = ParticleSystemComponentSystem;
 
     pc.Component._buildAccessors(pc.ParticleSystemComponent.prototype, _schema);
 
-    pc.extend(ParticleSystemComponentSystem.prototype, {
+    Object.assign(ParticleSystemComponentSystem.prototype, {
 
-        initializeComponentData: function(component, _data, properties) {
+        initializeComponentData: function (component, _data, properties) {
             var data = {};
 
             properties = [];
             var types = this.propertyTypes;
             var type;
+
+            // we store the mesh asset id as "mesh" (it should be "meshAsset")
+            // this re-maps "mesh" into "meshAsset" if it is an asset or an asset id
+            if (_data.mesh instanceof pc.Asset || typeof _data.mesh === 'number') {
+                // migrate into meshAsset property
+                _data.meshAsset = _data.mesh;
+                delete _data.mesh;
+            }
 
             for (var prop in _data) {
                 if (_data.hasOwnProperty(prop)) {
@@ -134,7 +145,7 @@ pc.extend(pc, function() {
                 }
             }
 
-            ParticleSystemComponentSystem._super.initializeComponentData.call(this, component, data, properties);
+            pc.ComponentSystem.prototype.initializeComponentData.call(this, component, data, properties);
         },
 
         cloneComponent: function (entity, clone) {
@@ -164,7 +175,7 @@ pc.extend(pc, function() {
             return this.addComponent(clone, data);
         },
 
-        onUpdate: function(dt) {
+        onUpdate: function (dt) {
             var components = this.store;
             var numSteps, i, j, c;
             var stats = this.app.stats.particles;
@@ -187,24 +198,24 @@ pc.extend(pc, function() {
                             var layers = data.layers;
                             for (i = 0; i < layers.length; i++) {
                                 layer = this.app.scene.layers.getLayerById(layers[i]);
-                                if (! layer) continue;
+                                if (!layer) continue;
 
                                 if (!layer._lightCube) {
                                     layer._lightCube = new Float32Array(6 * 3);
                                 }
                                 lightCube = layer._lightCube;
                                 for (i = 0; i < 6; i++) {
-                                    lightCube[i * 3] = this.app.scene.ambientLight.data[0];
-                                    lightCube[i * 3 + 1] = this.app.scene.ambientLight.data[1];
-                                    lightCube[i * 3 + 2] = this.app.scene.ambientLight.data[2];
+                                    lightCube[i * 3] = this.app.scene.ambientLight.r;
+                                    lightCube[i * 3 + 1] = this.app.scene.ambientLight.g;
+                                    lightCube[i * 3 + 2] = this.app.scene.ambientLight.b;
                                 }
                                 var dirs = layer._sortedLights[pc.LIGHTTYPE_DIRECTIONAL];
                                 for (j = 0; j < dirs.length; j++) {
                                     for (c = 0; c < 6; c++) {
                                         var weight = Math.max(emitter.lightCubeDir[c].dot(dirs[j]._direction), 0) * dirs[j]._intensity;
-                                        lightCube[c * 3] += dirs[j]._color.data[0] * weight;
-                                        lightCube[c * 3 + 1] += dirs[j]._color.data[1] * weight;
-                                        lightCube[c * 3 + 2] += dirs[j]._color.data[2] * weight;
+                                        lightCube[c * 3] += dirs[j]._color.r * weight;
+                                        lightCube[c * 3 + 1] += dirs[j]._color.g * weight;
+                                        lightCube[c * 3 + 2] += dirs[j]._color.b * weight;
                                     }
                                 }
                             }
@@ -213,7 +224,6 @@ pc.extend(pc, function() {
 
                         if (!data.paused) {
                             emitter.simTime += dt;
-                            numSteps = 0;
                             if (emitter.simTime > emitter.fixedTimeStep) {
                                 numSteps = Math.floor(emitter.simTime / emitter.fixedTimeStep);
                                 emitter.simTime -= numSteps * emitter.fixedTimeStep;
@@ -221,13 +231,12 @@ pc.extend(pc, function() {
                             if (numSteps) {
                                 numSteps = Math.min(numSteps, emitter.maxSubSteps);
                                 for (i = 0; i < numSteps; i++) {
-                                    emitter.addTime(emitter.fixedTimeStep);
+                                    emitter.addTime(emitter.fixedTimeStep, false);
                                 }
                                 stats._updatesPerFrame += numSteps;
                                 stats._frameTime += emitter._addTimeTime;
                                 emitter._addTimeTime = 0;
                             }
-
                             emitter.finishFrame();
                         }
                     }
@@ -235,17 +244,8 @@ pc.extend(pc, function() {
             }
         },
 
-        onRemove: function(entity, component) {
-            var data = component.data;
-            if (data.model) {
-                entity.removeChild(data.model.getGraph());
-                data.model = null;
-            }
-
-            if (component.emitter) {
-                component.emitter.destroy();
-                component.emitter = null;
-            }
+        onRemove: function (entity, component) {
+            component.onRemove();
         }
     });
 

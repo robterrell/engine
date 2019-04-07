@@ -1,8 +1,7 @@
-pc.extend(pc, function () {
+Object.assign(pc, function () {
     'use strict';
 
     /**
-     * @private
      * @enum pc.SPRITETYPE
      * @name pc.SPRITETYPE_SIMPLE
      * @description A {@link pc.SpriteComponent} that displays a single frame from a sprite asset.
@@ -11,7 +10,6 @@ pc.extend(pc, function () {
 
 
     /**
-     * @private
      * @enum pc.SPRITETYPE
      * @name pc.SPRITETYPE_ANIMATED
      * @description A {@link pc.SpriteComponent} that renders sprite animations.
@@ -27,7 +25,6 @@ pc.extend(pc, function () {
     var PARAM_ATLAS_RECT = 'atlasRect';
 
     /**
-     * @private
      * @component
      * @constructor
      * @name pc.SpriteComponent
@@ -56,10 +53,13 @@ pc.extend(pc, function () {
      * @property {Array} layers An array of layer IDs ({@link pc.Layer#id}) to which this sprite should belong.
      * @property {Number} drawOrder The draw order of the component. A higher value means that the component will be rendered on top of other components in the same layer.
      */
-    var SpriteComponent = function SpriteComponent (system, entity) {
+    var SpriteComponent = function SpriteComponent(system, entity) {
+        pc.Component.call(this, system, entity);
+
         this._type = pc.SPRITETYPE_SIMPLE;
         this._material = system.defaultMaterial;
         this._color = new pc.Color(1, 1, 1, 1);
+        this._colorUniform = new Float32Array(3);
         this._speed = 1;
         this._flipX = false;
         this._flipY = false;
@@ -71,8 +71,11 @@ pc.extend(pc, function () {
 
         // 9-slicing
         this._outerScale = new pc.Vec2(1, 1);
+        this._outerScaleUniform = new Float32Array(2);
         this._innerOffset = new pc.Vec4();
+        this._innerOffsetUniform = new Float32Array(4);
         this._atlasRect = new pc.Vec4();
+        this._atlasRectUniform = new Float32Array(4);
 
         // batch groups
         this._batchGroupId = -1;
@@ -104,34 +107,46 @@ pc.extend(pc, function () {
 
         this._currentClip = this._defaultClip;
     };
-    SpriteComponent = pc.inherits(SpriteComponent, pc.Component);
+    SpriteComponent.prototype = Object.create(pc.Component.prototype);
+    SpriteComponent.prototype.constructor = SpriteComponent;
 
-    pc.extend(SpriteComponent.prototype, {
+    Object.assign(SpriteComponent.prototype, {
         onEnable: function () {
-            SpriteComponent._super.onEnable.call(this);
+            var app = this.system.app;
+            var scene = app.scene;
 
-            this.system.app.scene.on("set:layers", this._onLayersChanged, this);
-            if (this.system.app.scene.layers) {
-                this.system.app.scene.layers.on("add", this._onLayerAdded, this);
-                this.system.app.scene.layers.on("remove", this._onLayerRemoved, this);
+            scene.on("set:layers", this._onLayersChanged, this);
+            if (scene.layers) {
+                scene.layers.on("add", this._onLayerAdded, this);
+                scene.layers.on("remove", this._onLayerRemoved, this);
             }
 
             this._showModel();
             if (this._autoPlayClip)
                 this._tryAutoPlay();
+
+            if (this._batchGroupId >= 0) {
+                app.batcher.insert(pc.BatchGroup.SPRITE, this._batchGroupId, this.entity);
+            }
         },
 
         onDisable: function () {
-            SpriteComponent._super.onDisable.call(this);
+            var app = this.system.app;
+            var scene = app.scene;
 
-            this.system.app.scene.off("set:layers", this._onLayersChanged, this);
-            if (this.system.app.scene.layers) {
-                this.system.app.scene.layers.off("add", this._onLayerAdded, this);
-                this.system.app.scene.layers.off("remove", this._onLayerRemoved, this);
+            scene.off("set:layers", this._onLayersChanged, this);
+            if (scene.layers) {
+                scene.layers.off("add", this._onLayerAdded, this);
+                scene.layers.off("remove", this._onLayerRemoved, this);
             }
 
             this.stop();
             this._hideModel();
+
+
+            if (this._batchGroupId >= 0) {
+                app.batcher.remove(pc.BatchGroup.SPRITE, this._batchGroupId, this.entity);
+            }
         },
 
         onDestroy: function () {
@@ -165,7 +180,7 @@ pc.extend(pc, function () {
 
         _showModel: function () {
             if (this._addedModel) return;
-            if (! this._meshInstance) return;
+            if (!this._meshInstance) return;
 
             var i;
             var len;
@@ -183,7 +198,7 @@ pc.extend(pc, function () {
         },
 
         _hideModel: function () {
-            if (! this._addedModel || ! this._meshInstance) return;
+            if (!this._addedModel || !this._meshInstance) return;
 
             var i;
             var len;
@@ -202,11 +217,11 @@ pc.extend(pc, function () {
 
         // Set the desired mesh on the mesh instance
         _showFrame: function (frame) {
-            if (! this.sprite) return;
+            if (!this.sprite) return;
 
             var mesh = this.sprite.meshes[frame];
             // if mesh is null then hide the mesh instance
-            if (! mesh) {
+            if (!mesh) {
                 if (this._meshInstance) {
                     this._meshInstance.mesh = null;
                     this._meshInstance.visible = false;
@@ -223,7 +238,7 @@ pc.extend(pc, function () {
             }
 
             // create mesh instance if it doesn't exist yet
-            if (! this._meshInstance) {
+            if (!this._meshInstance) {
                 this._meshInstance = new pc.MeshInstance(this._node, mesh, this._material);
                 this._meshInstance.castShadow = false;
                 this._meshInstance.receiveShadow = false;
@@ -231,8 +246,11 @@ pc.extend(pc, function () {
                 this._model.meshInstances.push(this._meshInstance);
 
                 // set overrides on mesh instance
-                this._meshInstance.setParameter(PARAM_EMISSIVE, this._color.data3);
-                this._meshInstance.setParameter(PARAM_OPACITY, this._color.data[3]);
+                this._colorUniform[0] = this._color.r;
+                this._colorUniform[1] = this._color.g;
+                this._colorUniform[2] = this._color.b;
+                this._meshInstance.setParameter(PARAM_EMISSIVE, this._colorUniform);
+                this._meshInstance.setParameter(PARAM_OPACITY, this._color.a);
 
                 // now that we created the mesh instance, add the model to the scene
                 if (this.enabled && this.entity.enabled) {
@@ -293,8 +311,16 @@ pc.extend(pc, function () {
                 }
 
                 // set inner offset and atlas rect on mesh instance
-                this._meshInstance.setParameter(PARAM_INNER_OFFSET, this._innerOffset.data);
-                this._meshInstance.setParameter(PARAM_ATLAS_RECT, this._atlasRect.data);
+                this._innerOffsetUniform[0] = this._innerOffset.x;
+                this._innerOffsetUniform[1] = this._innerOffset.y;
+                this._innerOffsetUniform[2] = this._innerOffset.z;
+                this._innerOffsetUniform[3] = this._innerOffset.w;
+                this._meshInstance.setParameter(PARAM_INNER_OFFSET, this._innerOffsetUniform);
+                this._atlasRectUniform[0] = this._atlasRect.x;
+                this._atlasRectUniform[1] = this._atlasRect.y;
+                this._atlasRectUniform[2] = this._atlasRect.z;
+                this._atlasRectUniform[3] = this._atlasRect.w;
+                this._meshInstance.setParameter(PARAM_ATLAS_RECT, this._atlasRectUniform);
             } else {
                 this._meshInstance._updateAabbFunc = null;
             }
@@ -349,7 +375,9 @@ pc.extend(pc, function () {
                 // update outer scale
                 if (this._meshInstance) {
                     // use outerScale in ALL passes (depth, picker, etc) so the shape is correct
-                    this._meshInstance.setParameter(PARAM_OUTER_SCALE, this._outerScale.data, 0xFFFFFFFF);
+                    this._outerScaleUniform[0] = this._outerScale.x;
+                    this._outerScaleUniform[1] = this._outerScale.y;
+                    this._meshInstance.setParameter(PARAM_OUTER_SCALE, this._outerScaleUniform, 0xFFFFFFFF);
                 }
             }
 
@@ -371,19 +399,19 @@ pc.extend(pc, function () {
         },
 
         _tryAutoPlay: function () {
-            if (! this._autoPlayClip) return;
+            if (!this._autoPlayClip) return;
             if (this.type !== pc.SPRITETYPE_ANIMATED) return;
 
             var clip = this._clips[this._autoPlayClip];
             // if the clip exists and nothing else is playing play it
-            if (clip && ! clip.isPlaying && (!this._currentClip || !this._currentClip.isPlaying)) {
+            if (clip && !clip.isPlaying && (!this._currentClip || !this._currentClip.isPlaying)) {
                 if (this.enabled && this.entity.enabled) {
                     this.play(clip.name);
                 }
             }
         },
 
-        _onLayersChanged: function(oldComp, newComp) {
+        _onLayersChanged: function (oldComp, newComp) {
             oldComp.off("add", this.onLayerAdded, this);
             oldComp.off("remove", this.onLayerRemoved, this);
             newComp.on("add", this.onLayerAdded, this);
@@ -394,7 +422,7 @@ pc.extend(pc, function () {
             }
         },
 
-        _onLayerAdded: function(layer) {
+        _onLayerAdded: function (layer) {
             var index = this.layers.indexOf(layer.id);
             if (index < 0) return;
 
@@ -403,7 +431,7 @@ pc.extend(pc, function () {
             }
         },
 
-        _onLayerRemoved: function(layer) {
+        _onLayerRemoved: function (layer) {
             if (!this._meshInstance) return;
 
             var index = this.layers.indexOf(layer.id);
@@ -412,7 +440,6 @@ pc.extend(pc, function () {
         },
 
         /**
-         * @private
          * @function
          * @name pc.SpriteComponent#addClip
          * @description Creates and adds a new {@link pc.SpriteAnimationClip} to the component's clips.
@@ -440,7 +467,6 @@ pc.extend(pc, function () {
         },
 
         /**
-         * @private
          * @function
          * @name pc.SpriteComponent#removeClip
          * @description Removes a clip by name.
@@ -451,7 +477,6 @@ pc.extend(pc, function () {
         },
 
         /**
-         * @private
          * @function
          * @name pc.SpriteComponent#clip
          * @description Get an animation clip by name.
@@ -463,7 +488,6 @@ pc.extend(pc, function () {
         },
 
         /**
-         * @private
          * @function
          * @name pc.SpriteComponent#play
          * @description Plays a sprite animation clip by name. If the animation clip is already playing then this will do nothing.
@@ -491,7 +515,6 @@ pc.extend(pc, function () {
         },
 
         /**
-         * @private
          * @function
          * @name pc.SpriteComponent#pause
          * @description Pauses the current animation clip.
@@ -505,7 +528,6 @@ pc.extend(pc, function () {
         },
 
         /**
-         * @private
          * @function
          * @name pc.SpriteComponent#resume
          * @description Resumes the current paused animation clip.
@@ -519,7 +541,6 @@ pc.extend(pc, function () {
         },
 
         /**
-         * @private
          * @function
          * @name pc.SpriteComponent#stop
          * @description Stops the current animation clip and resets it to the first frame.
@@ -617,22 +638,25 @@ pc.extend(pc, function () {
             return this._color;
         },
         set: function (value) {
-            this._color.data[0] = value.data[0];
-            this._color.data[1] = value.data[1];
-            this._color.data[2] = value.data[2];
+            this._color.r = value.r;
+            this._color.g = value.g;
+            this._color.b = value.b;
 
             if (this._meshInstance) {
-                this._meshInstance.setParameter(PARAM_EMISSIVE, this._color.data3);
+                this._colorUniform[0] = this._color.r;
+                this._colorUniform[1] = this._color.g;
+                this._colorUniform[2] = this._color.b;
+                this._meshInstance.setParameter(PARAM_EMISSIVE, this._colorUniform);
             }
         }
     });
 
     Object.defineProperty(SpriteComponent.prototype, "opacity", {
         get: function () {
-            return this._color.data[3];
+            return this._color.a;
         },
         set: function (value) {
-            this._color.data[3] = value;
+            this._color.a = value;
             if (this._meshInstance) {
                 this._meshInstance.setParameter(PARAM_OPACITY, value);
             }
@@ -647,7 +671,7 @@ pc.extend(pc, function () {
             var name, key;
 
             // if value is null remove all clips
-            if (! value) {
+            if (!value) {
                 for (name in this._clips) {
                     this.removeClip(name);
                 }
@@ -674,7 +698,7 @@ pc.extend(pc, function () {
                     }
                 }
 
-                if (! found) {
+                if (!found) {
                     this.removeClip(name);
                 }
             }
@@ -692,7 +716,7 @@ pc.extend(pc, function () {
             }
 
             // if the current clip doesn't have a sprite then hide the model
-            if (! this._currentClip || !this._currentClip.sprite) {
+            if (!this._currentClip || !this._currentClip.sprite) {
                 this._hideModel();
             }
         }
@@ -780,12 +804,11 @@ pc.extend(pc, function () {
             var prev = this._batchGroupId;
             this._batchGroupId = value;
 
-            if (prev >= 0) {
-                this.system.app.batcher._markGroupDirty(prev);
+            if (this.entity.enabled && prev >= 0) {
+                this.system.app.batcher.remove(pc.BatchGroup.SPRITE, prev, this.entity);
             }
-
-            if (this._batchGroupId >= 0) {
-                this.system.app.batcher._markGroupDirty(this._batchGroupId);
+            if (this.entity.enabled && value >= 0) {
+                this.system.app.batcher.insert(pc.BatchGroup.SPRITE, value, this.entity);
             } else {
                 // re-add model to scene in case it was removed by batching
                 if (prev >= 0) {
@@ -841,6 +864,16 @@ pc.extend(pc, function () {
         }
     });
 
+    Object.defineProperty(SpriteComponent.prototype, "aabb", {
+        get: function () {
+            if (this._meshInstance) {
+                return this._meshInstance.aabb;
+            }
+
+            return null;
+        }
+    });
+
     return {
         SpriteComponent: SpriteComponent
     };
@@ -850,7 +883,6 @@ pc.extend(pc, function () {
 // Events Documentation
 
 /**
- * @private
  * @event
  * @name pc.SpriteComponent#play
  * @description Fired when an animation clip starts playing
@@ -858,7 +890,6 @@ pc.extend(pc, function () {
  */
 
 /**
- * @private
  * @event
  * @name pc.SpriteComponent#pause
  * @description Fired when an animation clip is paused.
@@ -866,7 +897,6 @@ pc.extend(pc, function () {
  */
 
 /**
- * @private
  * @event
  * @name pc.SpriteComponent#resume
  * @description Fired when an animation clip is resumed.
@@ -874,7 +904,6 @@ pc.extend(pc, function () {
  */
 
 /**
- * @private
  * @event
  * @name pc.SpriteComponent#stop
  * @description Fired when an animation clip is stopped.
@@ -882,7 +911,6 @@ pc.extend(pc, function () {
  */
 
 /**
- * @private
  * @event
  * @name pc.SpriteComponent#end
  * @description Fired when an animation clip stops playing because it reached its ending.
@@ -890,7 +918,6 @@ pc.extend(pc, function () {
  */
 
 /**
- * @private
  * @event
  * @name pc.SpriteComponent#loop
  * @description Fired when an animation clip reached the end of its current loop.

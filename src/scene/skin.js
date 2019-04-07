@@ -1,4 +1,4 @@
-pc.extend(pc, function () {
+Object.assign(pc, function () {
     /**
      * @constructor
      * @name pc.Skin
@@ -66,6 +66,7 @@ pc.extend(pc, function () {
                 minFilter: pc.FILTER_NEAREST,
                 magFilter: pc.FILTER_NEAREST
             });
+            this.boneTexture.name = 'skin';
             this.matrixPalette = this.boneTexture.lock();
         } else {
             this.matrixPalette = new Float32Array(numBones * 16);
@@ -76,7 +77,7 @@ pc.extend(pc, function () {
         }
     };
 
-    SkinInstance.prototype = {
+    Object.assign(SkinInstance.prototype, {
 
         updateMatrices: function (rootNode) {
 
@@ -121,7 +122,7 @@ pc.extend(pc, function () {
                 this.boneTexture.unlock();
             }
         }
-    };
+    });
 
     return {
         Skin: Skin,

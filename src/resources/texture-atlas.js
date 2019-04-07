@@ -1,4 +1,4 @@
-pc.extend(pc, function () {
+Object.assign(pc, function () {
     var JSON_ADDRESS_MODE = {
         "repeat": pc.ADDRESS_REPEAT,
         "clamp": pc.ADDRESS_CLAMP_TO_EDGE,
@@ -20,19 +20,26 @@ pc.extend(pc, function () {
         this._loader = loader;
     };
 
-    TextureAtlasHandler.prototype = {
+    Object.assign(TextureAtlasHandler.prototype, {
         // Load the texture atlas texture using the texture resource loader
         load: function (url, callback) {
+            if (typeof url === 'string') {
+                url = {
+                    load: url,
+                    original: url
+                };
+            }
+
             var self = this;
             var handler = this._loader.getHandler("texture");
 
             // if supplied with a json file url (probably engine-only)
             // load json data then load texture of same name
-            if (pc.path.getExtension(url) === '.json') {
-                pc.http.get(url, function (err, response) {
+            if (pc.path.getExtension(url.original) === '.json') {
+                pc.http.get(url.load, function (err, response) {
                     if (!err) {
                         // load texture
-                        var textureUrl = url.replace('.json', '.png');
+                        var textureUrl = url.original.replace('.json', '.png');
                         self._loader.load(textureUrl, "texture", function (err, texture) {
                             if (err) {
                                 callback(err);
@@ -61,7 +68,7 @@ pc.extend(pc, function () {
             } else {
                 var handler = this._loader.getHandler("texture");
                 var texture = handler.open(url, data);
-                if (! texture) return null;
+                if (!texture) return null;
                 resource.texture = texture;
             }
             return resource;
@@ -151,7 +158,7 @@ pc.extend(pc, function () {
 
                     if (value) {
                         // add or update frame
-                        if (! asset.resource.frames[frameKey]) {
+                        if (!asset.resource.frames[frameKey]) {
                             asset.resource.frames[frameKey] = {
                                 rect: new pc.Vec4(value.rect),
                                 pivot: new pc.Vec2(value.pivot),
@@ -177,7 +184,7 @@ pc.extend(pc, function () {
                 }
             }
         }
-    };
+    });
 
     return {
         TextureAtlasHandler: TextureAtlasHandler

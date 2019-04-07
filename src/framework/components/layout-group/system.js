@@ -1,5 +1,7 @@
-pc.extend(pc, function () {
+Object.assign(pc, function () {
     var _schema = ['enabled'];
+
+    var MAX_ITERATIONS = 100;
 
     /**
      * @private
@@ -10,9 +12,10 @@ pc.extend(pc, function () {
      * @extends pc.ComponentSystem
      */
     var LayoutGroupComponentSystem = function LayoutGroupComponentSystem(app) {
+        pc.ComponentSystem.call(this, app);
+
         this.id = 'layoutgroup';
         this.app = app;
-        app.systems.add(this.id, this);
 
         this.ComponentType = pc.LayoutGroupComponent;
         this.DataType = pc.LayoutGroupComponentData;
@@ -24,13 +27,14 @@ pc.extend(pc, function () {
         this.on('beforeremove', this._onRemoveComponent, this);
 
         // Perform reflow when running in the engine
-        pc.ComponentSystem.on('postUpdate', this._onPostUpdate, this);
+        pc.ComponentSystem.bind('postUpdate', this._onPostUpdate, this);
     };
-    LayoutGroupComponentSystem = pc.inherits(LayoutGroupComponentSystem, pc.ComponentSystem);
+    LayoutGroupComponentSystem.prototype = Object.create(pc.ComponentSystem.prototype);
+    LayoutGroupComponentSystem.prototype.constructor = LayoutGroupComponentSystem;
 
     pc.Component._buildAccessors(pc.LayoutGroupComponent.prototype, _schema);
 
-    pc.extend(LayoutGroupComponentSystem.prototype, {
+    Object.assign(LayoutGroupComponentSystem.prototype, {
         initializeComponentData: function (component, data, properties) {
             if (data.enabled !== undefined) component.enabled = data.enabled;
             if (data.orientation !== undefined) component.orientation = data.orientation;
@@ -42,8 +46,11 @@ pc.extend(pc, function () {
                 } else {
                     component.alignment.set(data.alignment[0], data.alignment[1]);
                 }
+
+                /* eslint-disable no-self-assign */
                 // force update
                 component.alignment = component.alignment;
+                /* eslint-enable no-self-assign */
             }
             if (data.padding !== undefined) {
                 if (data.padding instanceof pc.Vec4){
@@ -51,8 +58,11 @@ pc.extend(pc, function () {
                 } else {
                     component.padding.set(data.padding[0], data.padding[1], data.padding[2], data.padding[3]);
                 }
+
+                /* eslint-disable no-self-assign */
                 // force update
                 component.padding = component.padding;
+                /* eslint-enable no-self-assign */
             }
             if (data.spacing !== undefined) {
                 if (data.spacing instanceof pc.Vec2){
@@ -60,14 +70,17 @@ pc.extend(pc, function () {
                 } else {
                     component.spacing.set(data.spacing[0], data.spacing[1]);
                 }
+
+                /* eslint-disable no-self-assign */
                 // force update
                 component.spacing = component.spacing;
+                /* eslint-enable no-self-assign */
             }
             if (data.widthFitting !== undefined) component.widthFitting = data.widthFitting;
             if (data.heightFitting !== undefined) component.heightFitting = data.heightFitting;
             if (data.wrap !== undefined) component.wrap = data.wrap;
 
-            LayoutGroupComponentSystem._super.initializeComponentData.call(this, component, data, properties);
+            pc.ComponentSystem.prototype.initializeComponentData.call(this, component, data, properties);
         },
 
         cloneComponent: function (entity, clone) {
@@ -102,19 +115,31 @@ pc.extend(pc, function () {
                 return;
             }
 
-            // Sort in ascending order of depth within the graph (i.e. outermost first), so that
-            // any layout groups which are children of other layout groups will always have their
-            // new size set before their own reflow is calculated.
-            this._reflowQueue.sort(function(componentA, componentB) {
-                return componentA.entity.graphDepth < componentB.entity.graphDepth;
-            });
+            var iterationCount = 0;
 
             while (this._reflowQueue.length > 0) {
-                var component = this._reflowQueue.shift();
-                component.reflow();
-            }
+                // Create a copy of the queue to sort and process. If processing the reflow of any
+                // layout groups results in additional groups being pushed to the queue, they will
+                // be processed on the next iteration of the while loop.
+                var queue = this._reflowQueue.slice();
+                this._reflowQueue.length = 0;
 
-            this._reflowQueue = [];
+                // Sort in ascending order of depth within the graph (i.e. outermost first), so that
+                // any layout groups which are children of other layout groups will always have their
+                // new size set before their own reflow is calculated.
+                queue.sort(function (componentA, componentB) {
+                    return (componentA.entity.graphDepth - componentB.entity.graphDepth);
+                });
+
+                for (var i = 0; i < queue.length; ++i) {
+                    queue[i].reflow();
+                }
+
+                if (++iterationCount >= MAX_ITERATIONS) {
+                    console.warn('Max reflow iterations limit reached, bailing.');
+                    break;
+                }
+            }
         },
 
         _onRemoveComponent: function (entity, component) {

@@ -1,4 +1,4 @@
-pc.extend(pc, function () {
+Object.assign(pc, function () {
     var keyA, keyB, sortPos, sortDir;
 
     function sortManual(drawCallA, drawCallB) {
@@ -49,6 +49,18 @@ pc.extend(pc, function () {
         // arrays of VisibleInstanceList for each camera
         this.visibleOpaque = [];
         this.visibleTransparent = [];
+    };
+
+    InstanceList.prototype.clearVisibleLists = function (cameraPass) {
+        if (this.visibleOpaque[cameraPass]) {
+            this.visibleOpaque[cameraPass].length = 0;
+            this.visibleOpaque[cameraPass].list.length = 0;
+        }
+
+        if (this.visibleTransparent[cameraPass]) {
+            this.visibleTransparent[cameraPass].length = 0;
+            this.visibleTransparent[cameraPass].list.length = 0;
+        }
     };
 
     /**
@@ -146,6 +158,7 @@ pc.extend(pc, function () {
      * Can be used in {@link pc.LayerComposition#getLayerById}.
      */
     var Layer = function (options) {
+        options = options || {};
 
         if (options.id !== undefined) {
             this.id = options.id;
@@ -174,8 +187,8 @@ pc.extend(pc, function () {
         this._clearDepthBuffer = options.clearDepthBuffer === undefined ? false : options.clearDepthBuffer;
         this._clearStencilBuffer = options.clearStencilBuffer === undefined ? false : options.clearStencilBuffer;
         this._clearOptions = {
-            color: this._clearColor.data,
-            depth: 1.0,
+            color: [this._clearColor.r, this._clearColor.g, this._clearColor.b, this._clearColor.a],
+            depth: 1,
             stencil: 0,
             flags: (this._clearColorBuffer ? pc.CLEARFLAG_COLOR : 0) | (this._clearDepthBuffer ? pc.CLEARFLAG_DEPTH : 0) | (this._clearStencilBuffer ? pc.CLEARFLAG_STENCIL : 0)
         };
@@ -205,6 +218,9 @@ pc.extend(pc, function () {
         this.opaqueMeshInstances = this.instances.opaqueMeshInstances;
         this.transparentMeshInstances = this.instances.transparentMeshInstances;
         this.shadowCasters = this.instances.shadowCasters;
+
+        this.customSortCallback = null;
+        this.customCalculateSortValues = null;
 
         this._lightComponents = [];
         this._lights = [];
@@ -264,13 +280,13 @@ pc.extend(pc, function () {
         var flags = 0;
 
         if (this._clearColorBuffer)
-            flags = flags | pc.CLEARFLAG_COLOR;
+            flags |= pc.CLEARFLAG_COLOR;
 
         if (this._clearDepthBuffer)
-            flags = flags | pc.CLEARFLAG_DEPTH;
+            flags |= pc.CLEARFLAG_DEPTH;
 
         if (this._clearStencilBuffer)
-            flags = flags | pc.CLEARFLAG_STENCIL;
+            flags |= pc.CLEARFLAG_STENCIL;
 
         this._clearOptions.flags = flags;
     };
@@ -347,12 +363,12 @@ pc.extend(pc, function () {
     };
 
     // SUBLAYER GROUPS
-    // If there are multiple sublayer with identical _cameraHash without anything in between, these are called a SUBLAYER GROUP
-    // instead of
-        // for each sublayer
-            // for each camera
-    // we go
-        // for each sublayerGroup
+    // If there are multiple sublayer with identical _cameraHash without anything in between, these
+    // are called a SUBLAYER GROUP instead of:
+    //     for each sublayer
+    //         for each camera
+    // we go:
+    //     for each sublayerGroup
 
     /**
      * @function
@@ -585,7 +601,7 @@ pc.extend(pc, function () {
             this.cameras.sort(sortCameras);
             var str = "";
             for (var i = 0; i < this.cameras.length; i++) {
-                str += this.cameras[i].entity._guid;
+                str += this.cameras[i].entity.getGuid();
             }
             this._cameraHash = pc.hashCode(str);
         } else {
@@ -617,6 +633,10 @@ pc.extend(pc, function () {
         if (id < 0) return;
         this.cameras.splice(id, 1);
         this._generateCameraHash();
+
+        // visible lists in layer are not updated after camera is removed
+        // so clear out any remaining mesh instances
+        this.instances.clearVisibleLists(id);
     };
 
     /**
@@ -634,18 +654,18 @@ pc.extend(pc, function () {
         this._generateCameraHash();
     };
 
-    Layer.prototype._calculateSortDistances = function(drawCalls, drawCallsCount, camPos, camFwd) {
+    Layer.prototype._calculateSortDistances = function (drawCalls, drawCallsCount, camPos, camFwd) {
         var i, drawCall, meshPos;
         var tempx, tempy, tempz;
         for (i = 0; i < drawCallsCount; i++) {
             drawCall = drawCalls[i];
             if (drawCall.command) continue;
-            if (drawCall.layer <= pc.scene.LAYER_FX) continue; // Only alpha sort mesh instances in the main world (backwards comp)
-            meshPos = drawCall.aabb.center.data;
-            tempx = meshPos[0] - camPos[0];
-            tempy = meshPos[1] - camPos[1];
-            tempz = meshPos[2] - camPos[2];
-            drawCall.zdist = tempx * camFwd[0] + tempy * camFwd[1] + tempz * camFwd[2];
+            if (drawCall.layer <= pc.LAYER_FX) continue; // Only alpha sort mesh instances in the main world (backwards comp)
+            meshPos = drawCall.aabb.center;
+            tempx = meshPos.x - camPos.x;
+            tempy = meshPos.y - camPos.y;
+            tempz = meshPos.z - camPos.z;
+            drawCall.zdist = tempx * camFwd.x + tempy * camFwd.y + tempz * camFwd.z;
         }
     };
 
@@ -653,17 +673,36 @@ pc.extend(pc, function () {
         var objects = this.instances;
         var sortMode = transparent ? this.transparentSortMode : this.opaqueSortMode;
         if (sortMode === pc.SORTMODE_NONE) return;
-        var visible = transparent ? objects.visibleTransparent[cameraPass] : objects.visibleOpaque[cameraPass];
-        if (sortMode === pc.SORTMODE_BACK2FRONT || sortMode === pc.SORTMODE_FRONT2BACK) {
-            sortPos = cameraNode.getPosition().data;
-            sortDir = cameraNode.forward.data;
-            this._calculateSortDistances(visible.list, visible.length, sortPos, sortDir);
-        }
 
-        if (visible.list.length !== visible.length) {
-            visible.list.length = visible.length;
+        var visible = transparent ? objects.visibleTransparent[cameraPass] : objects.visibleOpaque[cameraPass];
+
+        if (sortMode === pc.SORTMODE_CUSTOM) {
+            sortPos = cameraNode.getPosition();
+            sortDir = cameraNode.forward;
+            if (this.customCalculateSortValues) {
+                this.customCalculateSortValues(visible.list, visible.length, sortPos, sortDir);
+            }
+
+            if (visible.list.length !== visible.length) {
+                visible.list.length = visible.length;
+            }
+
+            if (this.customSortCallback) {
+                visible.list.sort(this.customSortCallback);
+            }
+        } else {
+            if (sortMode === pc.SORTMODE_BACK2FRONT || sortMode === pc.SORTMODE_FRONT2BACK) {
+                sortPos = cameraNode.getPosition();
+                sortDir = cameraNode.forward;
+                this._calculateSortDistances(visible.list, visible.length, sortPos, sortDir);
+            }
+
+            if (visible.list.length !== visible.length) {
+                visible.list.length = visible.length;
+            }
+
+            visible.list.sort(sortCallbacks[sortMode]);
         }
-        visible.list.sort(sortCallbacks[sortMode]);
     };
 
     return {

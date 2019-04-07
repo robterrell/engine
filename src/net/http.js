@@ -1,10 +1,11 @@
-pc.extend(pc, function () {
+Object.assign(pc, function () {
     /**
-    * @name pc.Http
-    * @class Used to send and receive HTTP requests.
-    * @description Create a new Http instance. By default, a PlayCanvas application creates an instance of this
-    * object at `pc.http`.
-    */
+     * @constructor
+     * @name pc.Http
+     * @classdesc Used to send and receive HTTP requests.
+     * @description Create a new Http instance. By default, a PlayCanvas application creates an instance of this
+     * object at `pc.http`.
+     */
     var Http = function Http() {
     };
 
@@ -29,7 +30,8 @@ pc.extend(pc, function () {
         TEXT: 'text',
         ARRAY_BUFFER: 'arraybuffer',
         BLOB: 'blob',
-        DOCUMENT: 'document'
+        DOCUMENT: 'document',
+        JSON: 'json'
     };
 
     Http.binaryExtensions = [
@@ -43,7 +45,7 @@ pc.extend(pc, function () {
         '.dds'
     ];
 
-    Http.prototype = {
+    Object.assign(Http.prototype, {
 
         ContentType: Http.ContentType,
         ResponseType: Http.ResponseType,
@@ -53,7 +55,7 @@ pc.extend(pc, function () {
          * @function
          * @name pc.Http#get
          * @description Perform an HTTP GET request to the given url.
-         * @param {String} url
+         * @param {String} url The URL to make the request to.
          * @param {Object} [options] Additional options
          * @param {Object} [options.headers] HTTP headers to add to the request
          * @param {Boolean} [options.async] Make the request asynchronously. Defaults to true.
@@ -71,9 +73,10 @@ pc.extend(pc, function () {
          * pc.http.get("http://example.com/", function (err, response) {
          *     console.log(response);
          * });
+         * @returns {XMLHttpRequest} The request object.
          */
         get: function (url, options, callback) {
-            if (typeof(options) === "function") {
+            if (typeof options === "function") {
                 callback = options;
                 options = {};
             }
@@ -83,8 +86,8 @@ pc.extend(pc, function () {
         /**
          * @function
          * @name pc.Http#post
-         * @description Perform an HTTP POST request to the given url
-         * @param {String} url The URL to make the request to
+         * @description Perform an HTTP POST request to the given url.
+         * @param {String} url The URL to make the request to.
          * @param {Object} data Data to send in the body of the request.
          * Some content types are handled automatically. If postdata is an XML Document, it is handled. If
          * the Content-Type header is set to 'application/json' then the postdata is JSON stringified.
@@ -98,9 +101,10 @@ pc.extend(pc, function () {
          * @param {Function} callback The callback used when the response has returned. Passed (err, data)
          * where data is the response (format depends on response type: text, Object, ArrayBuffer, XML) and
          * err is the error code.
+         * @returns {XMLHttpRequest} The request object.
          */
         post: function (url, data, options, callback) {
-            if (typeof(options) === "function") {
+            if (typeof options === "function") {
                 callback = options;
                 options = {};
             }
@@ -111,8 +115,8 @@ pc.extend(pc, function () {
         /**
          * @function
          * @name pc.Http#put
-         * @description Perform an HTTP PUT request to the given url
-         * @param {String} url The URL to make the request to
+         * @description Perform an HTTP PUT request to the given url.
+         * @param {String} url The URL to make the request to.
          * @param {Document | Object} data Data to send in the body of the request.
          * Some content types are handled automatically. If postdata is an XML Document, it is handled. If
          * the Content-Type header is set to 'application/json' then the postdata is JSON stringified.
@@ -126,9 +130,10 @@ pc.extend(pc, function () {
          * @param {Function} callback The callback used when the response has returned. Passed (err, data)
          * where data is the response (format depends on response type: text, Object, ArrayBuffer, XML) and
          * err is the error code.
+         * @returns {XMLHttpRequest} The request object.
          */
         put: function (url, data, options, callback) {
-            if (typeof(options) === "function") {
+            if (typeof options === "function") {
                 callback = options;
                 options = {};
             }
@@ -154,9 +159,10 @@ pc.extend(pc, function () {
          * @param {Function} callback The callback used when the response has returned. Passed (err, data)
          * where data is the response (format depends on response type: text, Object, ArrayBuffer, XML) and
          * err is the error code.
+         * @returns {XMLHttpRequest} The request object.
          */
         del: function (url, options, callback) {
-            if (typeof(options) === "function") {
+            if (typeof options === "function") {
                 callback = options;
                 options = {};
             }
@@ -182,12 +188,13 @@ pc.extend(pc, function () {
          * @param {Function} callback The callback used when the response has returned. Passed (err, data)
          * where data is the response (format depends on response type: text, Object, ArrayBuffer, XML) and
          * err is the error code.
+         * @returns {XMLHttpRequest} The request object.
          */
         request: function (method, url, options, callback) {
             var uri, query, timestamp, postdata, xhr;
             var errored = false;
 
-            if (typeof(options) === "function") {
+            if (typeof options === "function") {
                 callback = options;
                 options = {};
             }
@@ -336,10 +343,13 @@ pc.extend(pc, function () {
             if (xhr.readyState === 4) {
                 switch (xhr.status) {
                     case 0: {
+
                         // If this is a local resource then continue (IOS) otherwise the request
                         // didn't complete, possibly an exception or attempt to do cross-domain request
                         if (url[0] != '/') {
                             this._onSuccess(method, url, options, xhr);
+                        } else {
+                            this._onError(method, url, options, xhr);
                         }
 
                         break;
@@ -370,34 +380,43 @@ pc.extend(pc, function () {
                 parts = header.split(";");
                 contentType = parts[0].trim();
             }
-            // Check the content type to see if we want to parse it
-            if (contentType === this.ContentType.JSON || url.split('?')[0].endsWith(".json")) {
-                // It's a JSON response
-                response = JSON.parse(xhr.responseText);
-            } else if (this._isBinaryContentType(contentType)) {
-                response = xhr.response;
-            } else {
-                if (xhr.responseType === Http.ResponseType.ARRAY_BUFFER) {
-                    logWARNING(pc.string.format('responseType: {0} being served with Content-Type: {1}', Http.ResponseType.ARRAY_BUFFER, contentType));
+            try {
+                // Check the content type to see if we want to parse it
+                if (contentType === this.ContentType.JSON || url.split('?')[0].endsWith(".json")) {
+                    // It's a JSON response
+                    response = JSON.parse(xhr.responseText);
+                } else if (this._isBinaryContentType(contentType)) {
                     response = xhr.response;
                 } else {
-                    if (xhr.responseType === Http.ResponseType.DOCUMENT || contentType === this.ContentType.XML) {
-                        // It's an XML response
-                        response = xhr.responseXML;
+                    if (contentType) {
+                        logWARNING(pc.string.format('responseType: {0} being served with Content-Type: {1}', xhr.responseType, contentType));
+                    }
+
+                    if (xhr.responseType === Http.ResponseType.ARRAY_BUFFER) {
+                        response = xhr.response;
+                    } else if (xhr.responseType === Http.ResponseType.BLOB || xhr.responseType === Http.ResponseType.JSON) {
+                        response = xhr.response;
                     } else {
-                        // It's raw data
-                        response = xhr.responseText;
+                        if (xhr.responseType === Http.ResponseType.DOCUMENT || contentType === this.ContentType.XML) {
+                            // It's an XML response
+                            response = xhr.responseXML;
+                        } else {
+                            // It's raw data
+                            response = xhr.responseText;
+                        }
                     }
                 }
-            }
 
-            options.callback(null, response);
+                options.callback(null, response);
+            } catch (err) {
+                options.callback(err);
+            }
         },
 
         _onError: function (method, url, options, xhr) {
             options.callback(xhr.status, null);
         }
-    };
+    });
 
     return {
         Http: Http,

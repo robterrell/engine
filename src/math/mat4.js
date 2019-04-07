@@ -1,61 +1,21 @@
-pc.extend(pc, (function () {
+Object.assign(pc, (function () {
     'use strict';
-
-    var typeNumber = 'number';
 
     /**
      * @constructor
      * @name pc.Mat4
      * @classdesc A 4x4 matrix.
-     * @description Creates a new Mat4 object.
-     * @param {Number} [v0] The value in row 0, column 0. If v0 is an array of length 16, the array will be used to populate all components.
-     * @param {Number} [v1] The value in row 1, column 0.
-     * @param {Number} [v2] The value in row 2, column 0.
-     * @param {Number} [v3] The value in row 3, column 0.
-     * @param {Number} [v4] The value in row 0, column 1.
-     * @param {Number} [v5] The value in row 1, column 1.
-     * @param {Number} [v6] The value in row 2, column 1.
-     * @param {Number} [v7] The value in row 3, column 1.
-     * @param {Number} [v8] The value in row 0, column 2.
-     * @param {Number} [v9] The value in row 1, column 2.
-     * @param {Number} [v10] The value in row 2, column 2.
-     * @param {Number} [v11] The value in row 3, column 2.
-     * @param {Number} [v12] The value in row 0, column 3.
-     * @param {Number} [v13] The value in row 1, column 3.
-     * @param {Number} [v14] The value in row 2, column 3.
-     * @param {Number} [v15] The value in row 3, column 3.
+     * @description Creates a new identity Mat4 object.
      */
-    var Mat4 = function (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15) {
-        if (v0 && v0.length === 16) {
-            this.data = new Float32Array(v0);
-            return;
-        }
-
-        this.data = new Float32Array(16);
-
-        if (typeof(v0) === typeNumber) {
-            this.data[0] = v0;
-            this.data[1] = v1;
-            this.data[2] = v2;
-            this.data[3] = v3;
-            this.data[4] = v4;
-            this.data[5] = v5;
-            this.data[6] = v6;
-            this.data[7] = v7;
-            this.data[8] = v8;
-            this.data[9] = v9;
-            this.data[10] = v10;
-            this.data[11] = v11;
-            this.data[12] = v12;
-            this.data[13] = v13;
-            this.data[14] = v14;
-            this.data[15] = v15;
-        } else {
-            this.setIdentity();
-        }
+    var Mat4 = function () {
+        var data = new Float32Array(16);
+        // Create an identity matrix. Note that a new Float32Array has all elements set
+        // to zero by default, so we only need to set the relevant elements to one.
+        data[0] = data[5] = data[10] = data[15] = 1;
+        this.data = data;
     };
 
-    Mat4.prototype = {
+    Object.assign(Mat4.prototype, {
         /**
          * @function
          * @name pc.Mat4#add2
@@ -67,7 +27,7 @@ pc.extend(pc, (function () {
          * @example
          * var m = new pc.Mat4();
          *
-         * m.add2(pc.Mat4.INDENTITY, pc.Mat4.ONE);
+         * m.add2(pc.Mat4.IDENTITY, pc.Mat4.ONE);
          *
          * console.log("The result of the addition is: " a.toString());
          */
@@ -346,29 +306,21 @@ pc.extend(pc, (function () {
          * var tv = m.transformPoint(v);
          */
         transformPoint: function (vec, res) {
-            var x, y, z,
-                m = this.data,
-                v = vec.data;
+            var x, y, z, m;
+
+            m = this.data;
+
+            x = vec.x;
+            y = vec.y;
+            z = vec.z;
 
             res = (res === undefined) ? new pc.Vec3() : res;
 
-            x =
-                v[0] * m[0] +
-                v[1] * m[4] +
-                v[2] * m[8] +
-                m[12];
-            y =
-                v[0] * m[1] +
-                v[1] * m[5] +
-                v[2] * m[9] +
-                m[13];
-            z =
-                v[0] * m[2] +
-                v[1] * m[6] +
-                v[2] * m[10] +
-                m[14];
+            res.x = x * m[0] + y * m[4] + z * m[8] + m[12];
+            res.y = x * m[1] + y * m[5] + z * m[9] + m[13];
+            res.z = x * m[2] + y * m[6] + z * m[10] + m[14];
 
-            return res.set(x, y, z);
+            return res;
         },
 
         /**
@@ -388,26 +340,21 @@ pc.extend(pc, (function () {
          * var tv = m.transformVector(v);
          */
         transformVector: function (vec, res) {
-            var x, y, z,
-                m = this.data,
-                v = vec.data;
+            var x, y, z, m;
+
+            m = this.data;
+
+            x = vec.x;
+            y = vec.y;
+            z = vec.z;
 
             res = (res === undefined) ? new pc.Vec3() : res;
 
-            x =
-                v[0] * m[0] +
-                v[1] * m[4] +
-                v[2] * m[8];
-            y =
-                v[0] * m[1] +
-                v[1] * m[5] +
-                v[2] * m[9];
-            z =
-                v[0] * m[2] +
-                v[1] * m[6] +
-                v[2] * m[10];
+            res.x = x * m[0] + y * m[4] + z * m[8];
+            res.y = x * m[1] + y * m[5] + z * m[9];
+            res.z = x * m[2] + y * m[6] + z * m[10];
 
-            return res.set(x, y, z);
+            return res;
         },
 
         /**
@@ -430,35 +377,23 @@ pc.extend(pc, (function () {
          * m.transformVec4(v, result);
          */
         transformVec4: function (vec, res) {
-            var x, y, z, w,
-                m = this.data,
-                v = vec.data;
+            var x, y, z, w, m;
+
+            m = this.data;
+
+            x = vec.x;
+            y = vec.y;
+            z = vec.z;
+            w = vec.w;
 
             res = (res === undefined) ? new pc.Vec4() : res;
 
-            x =
-                v[0] * m[0] +
-                v[1] * m[4] +
-                v[2] * m[8] +
-                v[3] * m[12];
-            y =
-                v[0] * m[1] +
-                v[1] * m[5] +
-                v[2] * m[9] +
-                v[3] * m[13];
-            z =
-                v[0] * m[2] +
-                v[1] * m[6] +
-                v[2] * m[10] +
-                v[3] * m[14];
+            res.x = x * m[0] + y * m[4] + z * m[8] + w * m[12];
+            res.y = x * m[1] + y * m[5] + z * m[9] + w * m[13];
+            res.z = x * m[2] + y * m[6] + z * m[10] + w * m[14];
+            res.w = x * m[3] + y * m[7] + z * m[11] + w * m[15];
 
-            w =
-                v[0] * m[3] +
-                v[1] * m[7] +
-                v[2] * m[11] +
-                v[3] * m[15];
-
-            return res.set(x, y, z, w);
+            return res;
         },
 
         /**
@@ -807,9 +742,6 @@ pc.extend(pc, (function () {
 
             det = (b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06);
             if (det === 0) {
-                // #ifdef DEBUG
-                console.warn('pc.Mat4#invert: Cannot invert matrix, determinant is 0');
-                // #endif
                 this.setIdentity();
             } else {
                 invDet = 1 / det;
@@ -1040,9 +972,6 @@ pc.extend(pc, (function () {
 
             det =  m0 * a11 + m1 * a12 + m2 * a13;
             if (det === 0) { // no inverse
-                // #ifdef DEBUG
-                console.warn('pc.Mat4#invertTo3x3: Can\'t invert matrix, determinant is 0');
-                // #endif
                 return this;
             }
 
@@ -1301,7 +1230,7 @@ pc.extend(pc, (function () {
             t += ']';
             return t;
         }
-    };
+    });
 
     /**
      * @field
@@ -1330,7 +1259,7 @@ pc.extend(pc, (function () {
      */
     Object.defineProperty(Mat4, 'ZERO', {
         get: (function () {
-            var zero = new Mat4(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            var zero = new Mat4().set([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
             return function () {
                 return zero;
             };

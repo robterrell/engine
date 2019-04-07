@@ -1,4 +1,4 @@
-pc.extend(pc, function () {
+Object.assign(pc, function () {
     /**
      * @enum pc.SCALEMODE
      * @name pc.SCALEMODE_NONE
@@ -12,6 +12,7 @@ pc.extend(pc, function () {
      */
     pc.SCALEMODE_BLEND = "blend";
 
+    // var counter = 1;
     /**
      * @component
      * @constructor
@@ -22,49 +23,77 @@ pc.extend(pc, function () {
      * @param {pc.Entity} entity The Entity that this Component is attached to.
      * @extends pc.Component
      * @property {Boolean} screenSpace If true then the ScreenComponent will render its child {@link pc.ElementComponent}s in screen space instead of world space. Enable this to create 2D user interfaces.
+     * @property {Boolean} cull If true then elements inside this screen will be not be rendered when outside of the screen (only valid when screenSpace is true)
      * @property {String} scaleMode Can either be {@link pc.SCALEMODE_NONE} or {@link pc.SCALEMODE_BLEND}. See the description of referenceResolution for more information.
      * @property {Number} scaleBlend A value between 0 and 1 that is used when scaleMode is equal to {@link pc.SCALEMODE_BLEND}. Scales the ScreenComponent with width as a reference (when value is 0), the height as a reference (when value is 1) or anything in between.
      * @property {pc.Vec2} resolution The width and height of the ScreenComponent. When screenSpace is true the resolution will always be equal to {@link pc.GraphicsDevice#width} x {@link pc.GraphicsDevice#height}.
      * @property {pc.Vec2} referenceResolution The resolution that the ScreenComponent is designed for. This is only taken into account when screenSpace is true and scaleMode is {@link pc.SCALEMODE_BLEND}. If the actual resolution is different then the ScreenComponent will be scaled according to the scaleBlend value.
      */
-    var ScreenComponent = function ScreenComponent (system, entity) {
+    var ScreenComponent = function ScreenComponent(system, entity) {
+        pc.Component.call(this, system, entity);
+
         this._resolution = new pc.Vec2(640, 320);
         this._referenceResolution = new pc.Vec2(640, 320);
         this._scaleMode = pc.SCALEMODE_NONE;
         this.scale = 1;
         this._scaleBlend = 0.5;
 
+        // priority determines the order in which screens components are rendered
+        // priority is set into the top 8 bits of the drawOrder property in an element
+        this._priority = 0;
+
         this._screenSpace = false;
+        this.cull = this._screenSpace;
         this._screenMatrix = new pc.Mat4();
 
         system.app.graphicsDevice.on("resizecanvas", this._onResize, this);
     };
-    ScreenComponent = pc.inherits(ScreenComponent, pc.Component);
+    ScreenComponent.prototype = Object.create(pc.Component.prototype);
+    ScreenComponent.prototype.constructor = ScreenComponent;
 
     var _transform = new pc.Mat4();
 
-    pc.extend(ScreenComponent.prototype, {
+    Object.assign(ScreenComponent.prototype, {
         /**
          * @function
          * @name pc.ScreenComponent#syncDrawOrder
          * @description Set the drawOrder of each child {@link pc.ElementComponent}
          * so that ElementComponents which are last in the hierarchy are rendered on top.
+         * Draw Order sync is queued and will be updated by the next update loop.
          */
         syncDrawOrder: function () {
+            this.system.queueDrawOrderSync(this.entity.getGuid(), this._processDrawOrderSync, this);
+        },
+
+        _recurseDrawOrderSync: function (e, i) {
+            if (!(e instanceof pc.Entity)) {
+                return i;
+            }
+
+            if (e.element) {
+                var prevDrawOrder = e.element.drawOrder;
+                e.element.drawOrder = i++;
+
+                if (e.element._batchGroupId >= 0 && prevDrawOrder != e.element.drawOrder) {
+                    this.system.app.batcher.markGroupDirty(e.element._batchGroupId);
+                }
+            }
+
+            var children = e.getChildren();
+            for (var j = 0; j < children.length; j++) {
+                i = this._recurseDrawOrderSync(children[j], i);
+            }
+
+            return i;
+        },
+
+        _processDrawOrderSync: function () {
             var i = 1;
 
-            var recurse = function (e) {
-                if (e.element) {
-                    e.element.drawOrder = i++;
-                }
+            this._recurseDrawOrderSync(this.entity, i);
 
-                var children = e.getChildren();
-                for (var j = 0; j < children.length; j++) {
-                    recurse(children[j]);
-                }
-            };
-
-            recurse(this.entity);
+            // fire internal event after all screen hierarchy is synced
+            this.fire('syncdraworder');
         },
 
         _calcProjectionMatrix: function () {
@@ -114,6 +143,9 @@ pc.extend(pc, function () {
         onRemove: function () {
             this.system.app.graphicsDevice.off("resizecanvas", this._onResize, this);
             this.fire('remove');
+
+            // remove all events used by elements
+            this.off();
         }
     });
 
@@ -130,8 +162,8 @@ pc.extend(pc, function () {
 
             this._calcProjectionMatrix();
 
-            if (! this.entity._dirtyLocal)
-                this.entity._dirtify(true);
+            if (!this.entity._dirtyLocal)
+                this.entity._dirtifyLocal();
 
             this.fire("set:resolution", this._resolution);
         },
@@ -146,8 +178,8 @@ pc.extend(pc, function () {
             this._updateScale();
             this._calcProjectionMatrix();
 
-            if (! this.entity._dirtyLocal)
-                this.entity._dirtify(true);
+            if (!this.entity._dirtyLocal)
+                this.entity._dirtifyLocal();
 
             this.fire("set:referenceresolution", this._resolution);
         },
@@ -168,8 +200,8 @@ pc.extend(pc, function () {
             }
             this.resolution = this._resolution; // force update either way
 
-            if (! this.entity._dirtyLocal)
-                this.entity._dirtify(true);
+            if (!this.entity._dirtyLocal)
+                this.entity._dirtifyLocal();
 
             this.fire('set:screenspace', this._screenSpace);
         },
@@ -205,8 +237,8 @@ pc.extend(pc, function () {
             this._updateScale();
             this._calcProjectionMatrix();
 
-            if (! this.entity._dirtyLocal)
-                this.entity._dirtify(true);
+            if (!this.entity._dirtyLocal)
+                this.entity._dirtifyLocal();
 
             this.fire("set:scaleblend", this._scaleBlend);
         },
@@ -215,6 +247,22 @@ pc.extend(pc, function () {
         }
     });
 
+    Object.defineProperty(ScreenComponent.prototype, "priority", {
+        get: function () {
+            return this._priority;
+        },
+
+        set: function (value) {
+            if (value > 0xFF) {
+                // #ifdef DEBUG
+                console.warn('Clamping screen priority from ' + value + ' to 255');
+                // #endif
+                value = 0xFF;
+            }
+
+            this._priority = value;
+        }
+    });
     return {
         ScreenComponent: ScreenComponent
     };

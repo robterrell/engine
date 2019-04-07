@@ -1,4 +1,4 @@
-pc.extend(pc, function () {
+Object.assign(pc, function () {
     'use strict';
 
     var JSON_PRIMITIVE_TYPE = {
@@ -24,9 +24,10 @@ pc.extend(pc, function () {
     // Take PlayCanvas JSON model data and create pc.Model
     var JsonModelParser = function (device) {
         this._device = device;
+        this._defaultMaterial = pc.getDefaultMaterial();
     };
 
-    JsonModelParser.prototype = {
+    Object.assign(JsonModelParser.prototype, {
         parse: function (data) {
             var modelData = data.model;
             if (!modelData) {
@@ -34,45 +35,33 @@ pc.extend(pc, function () {
             }
 
             if (modelData.version <= 1) {
-                logERROR(pc.string.format("Trying to parse unsupported model format."));
+                // #ifdef DEBUG
+                console.warn("JsonModelParser#parse: Trying to parse unsupported model format.");
+                // #endif
                 return null;
             }
 
-            ////////////////////
-            // NODE HIERARCHY //
-            ////////////////////
+            // NODE HIERARCHY
             var nodes = this._parseNodes(data);
 
-            ///////////
-            // SKINS //
-            ///////////
+            // SKINS
             var skins = this._parseSkins(data, nodes);
 
-            ///////////
-            // MORPHS //
-            ///////////
+            // MORPHS
             var morphs = this._parseMorphs(data, nodes);
 
-            ////////////////////
-            // VERTEX BUFFERS //
-            ////////////////////
+            // VERTEX BUFFERS
             var vertexBuffers = this._parseVertexBuffers(data);
 
-            //////////////////
-            // INDEX BUFFER //
-            //////////////////
+            // INDEX BUFFER
             var indices = this._parseIndexBuffers(data, vertexBuffers);
 
-            ////////////
-            // MESHES //
-            ////////////
+            // MESHES
             var meshes = this._parseMeshes(data, skins.skins, morphs.morphs, vertexBuffers, indices.buffer, indices.data);
 
             this._initMorphs(data, morphs.morphs, vertexBuffers, meshes);
 
-            ////////////////////
-            // MESH INSTANCES //
-            ////////////////////
+            // MESH INSTANCES
             var meshInstances = this._parseMeshInstances(data, nodes, meshes, skins.skins, skins.instances, morphs.morphs, morphs.instances);
 
             var model = new pc.Model();
@@ -127,10 +116,7 @@ pc.extend(pc, function () {
                 var inverseBindMatrices = [];
                 for (j = 0; j < skinData.inverseBindMatrices.length; j++) {
                     var ibm = skinData.inverseBindMatrices[j];
-                    inverseBindMatrices[j] = new pc.Mat4(ibm[0], ibm[1], ibm[2], ibm[3],
-                                                         ibm[4], ibm[5], ibm[6], ibm[7],
-                                                         ibm[8], ibm[9], ibm[10], ibm[11],
-                                                         ibm[12], ibm[13], ibm[14], ibm[15]);
+                    inverseBindMatrices[j] = new pc.Mat4().set(ibm);
                 }
 
                 var skin = new pc.Skin(this._device, inverseBindMatrices, skinData.boneNames);
@@ -543,37 +529,14 @@ pc.extend(pc, function () {
             for (i = 0; i < modelData.vertices.length; i++) {
                 var vertexData = modelData.vertices[i];
 
-                // Check to see if we need to generate tangents
-                if (!vertexData.tangent && vertexData.position && vertexData.normal && vertexData.texCoord0) {
-                    var indices = [];
-                    for (j = 0; j < modelData.meshes.length; j++) {
-                        if (modelData.meshes[j].vertices === i) {
-                            indices = indices.concat(modelData.meshes[j].indices);
-                        }
-                    }
-                    // Calculate main tangents
-                    var tangents = pc.calculateTangents(vertexData.position.data, vertexData.normal.data, vertexData.texCoord0.data, indices);
-                    vertexData.tangent = { type: "float32", components: 4, data: tangents };
-                }
-
                 var formatDesc = [];
                 for (attributeName in vertexData) {
                     attribute = vertexData[attributeName];
 
-                    var attribType = attribute.type;
-                    if (!this._device.supportsUnsignedByte) {
-                        if (attribType === "uint8") {
-                            attribType = "float32";
-                        }
-                        if (attribType === "int8") {
-                            attribType = "float32";
-                        }
-                    }
-
                     formatDesc.push({
                         semantic: attributeMap[attributeName],
                         components: attribute.components,
-                        type: JSON_VERTEX_ELEMENT_TYPE[attribType],
+                        type: JSON_VERTEX_ELEMENT_TYPE[attribute.type],
                         normalize: (attributeMap[attributeName] === pc.SEMANTIC_COLOR)
                     });
                 }
@@ -706,7 +669,7 @@ pc.extend(pc, function () {
                 var node = nodes[meshInstanceData.node];
                 var mesh = meshes[meshInstanceData.mesh];
 
-                var meshInstance = new pc.MeshInstance(node, mesh, pc.ModelHandler.DEFAULT_MATERIAL);
+                var meshInstance = new pc.MeshInstance(node, mesh, this._defaultMaterial);
 
                 if (mesh.skin) {
                     var skinIndex = skins.indexOf(mesh.skin);
@@ -733,7 +696,7 @@ pc.extend(pc, function () {
 
             return meshInstances;
         }
-    };
+    });
 
     return {
         JsonModelParser: JsonModelParser

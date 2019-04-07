@@ -1,4 +1,4 @@
-pc.extend(pc, (function () {
+Object.assign(pc, (function () {
     'use strict';
 
     /**
@@ -51,7 +51,7 @@ pc.extend(pc, (function () {
         this.sort();
     };
 
-    Curve.prototype = {
+    Object.assign(Curve.prototype, {
         /**
          * @function
          * @name pc.Curve#add
@@ -106,28 +106,29 @@ pc.extend(pc, (function () {
          * @returns {Number} The interpolated value
          */
         value: function (time) {
-            var i, len;
+            var i;
             var keys = this.keys;
+            var len = keys.length;
 
             // no keys
-            if (!keys.length) {
+            if (!len) {
                 return 0;
             }
 
             // Clamp values before first and after last key
             if (time < keys[0][0]) {
                 return keys[0][1];
-            } else if (time > keys[keys.length - 1][0]) {
-                return keys[keys.length - 1][1];
+            } else if (time > keys[len - 1][0]) {
+                return keys[len - 1][1];
             }
 
             var leftTime = 0;
-            var leftValue = keys.length ? keys[0][1] : 0;
+            var leftValue = len ? keys[0][1] : 0;
 
             var rightTime = 1;
             var rightValue = 0;
 
-            for (i = 0, len = keys.length; i < len; i++) {
+            for (i = 0; i < len; i++) {
                 // early exit check
                 if (keys[i][0] === time) {
                     return keys[i][1];
@@ -161,7 +162,7 @@ pc.extend(pc, (function () {
 
                 // back up index to left key
                 if (i > 0) {
-                    i = i - 1;
+                    i--;
                 }
 
                 if (i > 0) {
@@ -169,11 +170,11 @@ pc.extend(pc, (function () {
                     dt0 = keys[i][0] - keys[i - 1][0];
                 }
 
-                if (keys.length > i + 1) {
+                if (len > i + 1) {
                     dt1 = keys[i + 1][0] - keys[i][0];
                 }
 
-                if (keys.length > i + 2) {
+                if (len > i + 2) {
                     dt2 = keys[i + 2][0] - keys[i + 1][0];
                     p3 = keys[i + 2][1];
                 }
@@ -260,10 +261,10 @@ pc.extend(pc, (function () {
 
             return values;
         }
-    };
+    });
 
     Object.defineProperty(Curve.prototype, 'length', {
-        get: function() {
+        get: function () {
             return this.keys.length;
         }
     });

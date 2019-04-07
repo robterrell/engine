@@ -1,4 +1,4 @@
-pc.extend(pc, function () {
+Object.assign(pc, function () {
     var viewProj = new pc.Mat4();
 
     /**
@@ -25,7 +25,7 @@ pc.extend(pc, function () {
         this.update(projectionMatrix, viewMatrix);
     };
 
-    Frustum.prototype = {
+    Object.assign(Frustum.prototype, {
         /**
          * @function
          * @name pc.Frustum#update
@@ -145,10 +145,10 @@ pc.extend(pc, function () {
             var p;
 
             var sr = sphere.radius;
-            var sc = sphere.center.data;
-            var scx = sc[0];
-            var scy = sc[1];
-            var scz = sc[2];
+            var sc = sphere.center;
+            var scx = sc.x;
+            var scy = sc.y;
+            var scz = sc.z;
             var planes = this.planes;
             var plane;
 
@@ -163,7 +163,7 @@ pc.extend(pc, function () {
 
             return (c === 6) ? 2 : 1;
         }
-    };
+    });
 
     return {
         Frustum: Frustum

@@ -1,4 +1,4 @@
-pc.extend(pc, function () {
+Object.assign(pc, function () {
     'use strict';
 
     /**
@@ -24,12 +24,20 @@ pc.extend(pc, function () {
         }
     };
 
-    ScriptHandler.prototype = {
+    Object.assign(ScriptHandler.prototype, {
         load: function (url, callback) {
+            // Scripts don't support bundling since we concatenate them. Below is for consistency.
+            if (typeof url === 'string') {
+                url = {
+                    load: url,
+                    original: url
+                };
+            }
+
             var self = this;
             pc.script.app = this._app;
 
-            this._loadScript(url, function (err, url, extra) {
+            this._loadScript(url.original, function (err, url, extra) {
                 if (!err) {
                     if (pc.script.legacy) {
                         var Type = null;
@@ -96,7 +104,7 @@ pc.extend(pc, function () {
 
             head.appendChild(element);
         }
-    };
+    });
 
     return {
         ScriptHandler: ScriptHandler
